@@ -26,13 +26,13 @@ Gradle: 7.0 or newer
 Build Instructions
 
 Clone the repository:
-git clone https://github.com/yourusername/tracksure-android.git
+git clone https://github.com/yourusername/tracksure.git
 cd tracksure-android
 
 
 Open in Android Studio:
 
-Select File > Open and navigate to the tracksure-android directory.
+Select File > Open and navigate to the tracksure directory.
 
 
 Build the project:

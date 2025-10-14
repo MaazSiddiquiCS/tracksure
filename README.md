@@ -27,7 +27,7 @@ Build Instructions
 
 Clone the repository:
 git clone https://github.com/yourusername/tracksure.git
-cd tracksure-android
+cd tracksure
 
 
 Open in Android Studio:

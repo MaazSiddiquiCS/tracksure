@@ -38,8 +38,11 @@ class BluetoothConnectionManager(
     private val permissionManager = BluetoothPermissionManager(context)
     private val connectionTracker = BluetoothConnectionTracker(connectionScope, powerManager)
     private val packetBroadcaster = BluetoothPacketBroadcaster(connectionScope, connectionTracker, fragmentManager)
-    
+    private var packetHandler:((RoutedPacket) -> Unit)?=null
     // Delegate for component managers to call back to main manager
+    fun setPacketHandler(handler:(RoutedPacket) -> Unit) {
+        this.packetHandler = handler
+    }
     private val componentDelegate = object : BluetoothConnectionManagerDelegate {
         override fun onPacketReceived(packet: BitchatPacket, peerID: String, device: BluetoothDevice?) {
             Log.d(TAG, "onPacketReceived: Packet received from ${device?.address} ($peerID)")
@@ -52,7 +55,8 @@ class BluetoothConnectionManager(
             }
 
             if (peerID == myPeerID) return // Ignore messages from self
-
+            val routedPacket= RoutedPacket(packet=packet,peerID=peerID)
+            packetHandler?.invoke(routedPacket)
             delegate?.onPacketReceived(packet, peerID, device)
         }
         

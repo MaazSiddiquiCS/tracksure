@@ -64,7 +64,7 @@ class BluetoothMeshService(private val context: Context) {
         setupDelegates()
         messageHandler.packetProcessor = packetProcessor
         //startPeriodicDebugLogging()
-
+        connectionManager.setPacketHandler{routedPacket->handleIncomingPacket(routedPacket)}
         // Initialize sync manager (needs serviceScope)
         gossipSyncManager = GossipSyncManager(
             myPeerID = myPeerID,
@@ -97,7 +97,17 @@ class BluetoothMeshService(private val context: Context) {
             }
         }
     }
-    
+    //deduplicated packets to avoid infinite relay
+
+    /**
+     * The central handler for all incoming packets.
+     * It performs deduplication and then delegates to the MessageHandler for processing and relaying.
+     */
+
+    fun handleIncomingPacket(routedPacket: RoutedPacket){
+        packetProcessor.processPacket(routedPacket)
+    }
+
     /**
      * Start periodic debug logging every 10 seconds
      */

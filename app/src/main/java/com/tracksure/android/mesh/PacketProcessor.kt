@@ -114,7 +114,14 @@ class PacketProcessor(private val myPeerID: String) {
             }
         }
     }
-    
+    /**
+     * Handle received location packet - core protocol logic (exact same as iOS)
+     */
+    private suspend fun handleLocationPacket(routed: RoutedPacket) {
+        val locationString= routed.packet.payload.toString(Charsets.UTF_8)
+        Log.d("PacketProcessor", "Received location update from ${formatPeerForLog(routed.peerID?:"unknown peer")}: $locationString")
+        //delegate?.handleLocationUpdate(routed)
+    }
     /**
      * Handle received packet - core protocol logic (exact same as iOS)
      */
@@ -122,14 +129,23 @@ class PacketProcessor(private val myPeerID: String) {
         val packet = routed.packet
         val peerID = routed.peerID ?: "unknown"
 
+        val messageType= MessageType.fromValue(packet.type)
+        val isPublicPacket = when (messageType) {
+            MessageType.ANNOUNCE,
+            MessageType.LEAVE,
+            MessageType.REQUEST_SYNC -> true
+            MessageType.LOCATION_UPDATE -> true
+            else -> false
+        }
+        val securityCheckFailed = !(delegate?.validatePacketSecurity(packet, peerID) ?: true)
+
         // Basic validation and security checks
-        if (!delegate?.validatePacketSecurity(packet, peerID)!!) {
+        if (!isPublicPacket && securityCheckFailed) {
             Log.d(TAG, "Packet failed security validation from ${formatPeerForLog(peerID)}")
             return
         }
 
         var validPacket = true
-        val messageType = MessageType.fromValue(packet.type)
         Log.d(TAG, "Processing packet type ${messageType} from ${formatPeerForLog(peerID)}")
         // Verbose logging to debug manager (and chat via ChatViewModel observer)
         try {
@@ -143,10 +159,7 @@ class PacketProcessor(private val myPeerID: String) {
         // Handle public packet types (no address check needed)
         when (messageType) {
             MessageType.ANNOUNCE -> handleAnnounce(routed)
-            MessageType.LOCATION_UPDATE->{val locationString= routed.packet.payload.toString(
-                Charsets.UTF_8)
-                Log.d("PacketProcessor", "Received location update from ${formatPeerForLog(peerID)}: $locationString")
-            }
+            MessageType.LOCATION_UPDATE->handleLocationPacket(routed)
             MessageType.MESSAGE -> handleMessage(routed)
             MessageType.FILE_TRANSFER -> handleMessage(routed) // treat same routing path; parsing happens in handler
             MessageType.LEAVE -> handleLeave(routed)

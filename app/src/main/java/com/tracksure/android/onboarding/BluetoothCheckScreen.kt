@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 /**
@@ -20,7 +21,7 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun BluetoothCheckScreen(
-    modifier: Modifier,
+    modifier: Modifier=Modifier,
     status: BluetoothStatus,
     onEnableBluetooth: () -> Unit,
     onRetry: () -> Unit,
@@ -96,7 +97,7 @@ private fun BluetoothDisabledContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "bitchat needs Bluetooth to:",
+                    text = "TrackSure needs Bluetooth to:",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontWeight = FontWeight.Medium,
                         color = colorScheme.onSurface
@@ -104,11 +105,11 @@ private fun BluetoothDisabledContent(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
-                
+
                 Text(
                     text = "• Discover nearby users\n" +
                             "• Create mesh network connections\n" +
-                            "• Send and receive messages\n" +
+                            "• Send and receive locations\n" +
                             "• Work without internet or servers",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontFamily = FontFamily.Monospace,
@@ -222,7 +223,7 @@ private fun BluetoothCheckingContent(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "bitchat",
+            text = "TrackSure",
             style = MaterialTheme.typography.headlineLarge.copy(
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
@@ -269,4 +270,36 @@ private fun BluetoothLoadingIndicator() {
             strokeWidth = 3.dp
         )
     }
+}
+// Preview for the "Bluetooth Disabled" state
+@Preview(showBackground = true, name = "State: Disabled")
+@Composable
+fun BluetoothDisabledPreview() {
+    BluetoothCheckScreen(
+        status = BluetoothStatus.DISABLED,
+        onEnableBluetooth = {},
+        onRetry = {}
+    )
+}
+
+// Preview for the "Checking" state
+@Preview(showBackground = true, name = "State: Checking")
+@Composable
+fun BluetoothCheckingPreview() {
+    BluetoothCheckScreen(
+        status = BluetoothStatus.ENABLED,
+        onEnableBluetooth = {},
+        onRetry = {}
+    )
+}
+
+// Preview for the "Not Supported" state
+@Preview(showBackground = true, name = "State: Not Supported")
+@Composable
+fun BluetoothNotSupportedPreview() {
+    BluetoothCheckScreen(
+        status = BluetoothStatus.NOT_SUPPORTED,
+        onEnableBluetooth = {},
+        onRetry = {}
+    )
 }

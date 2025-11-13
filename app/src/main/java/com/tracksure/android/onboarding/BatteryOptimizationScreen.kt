@@ -18,6 +18,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tracksure.android.R
@@ -28,7 +29,7 @@ import com.tracksure.android.R
 
 @Composable
 fun BatteryOptimizationScreen(
-    modifier: Modifier,
+    modifier: Modifier=Modifier,
     status: BatteryOptimizationStatus,
     onDisableBatteryOptimization: () -> Unit,
     onRetry: () -> Unit,
@@ -103,7 +104,7 @@ private fun BatteryOptimizationEnabledContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "bitchat",
+                    text = "TrackSure",
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
@@ -151,7 +152,7 @@ private fun BatteryOptimizationEnabledContent(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "bitchat needs to run in the background to maintain mesh connections. battery optimization can interrupt these connections.",
+                                text = "TrackSure needs to run in the background to maintain mesh connections. battery optimization can interrupt these connections.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colorScheme.onBackground.copy(alpha = 0.8f)
                             )
@@ -282,7 +283,7 @@ private fun BatteryOptimizationCheckingContent(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "bitchat",
+                text = "TrackSure",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
@@ -320,7 +321,7 @@ private fun BatteryOptimizationCheckingContent(
         )
         
         Text(
-            text = "bitchat can run reliably in the background",
+            text = "TrackSure can run reliably in the background",
             style = MaterialTheme.typography.bodyMedium.copy(
                 fontFamily = FontFamily.Monospace,
                 color = colorScheme.onBackground.copy(alpha = 0.8f)
@@ -345,7 +346,7 @@ private fun BatteryOptimizationNotSupportedContent(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "bitchat",
+                text = "TrackSure",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
@@ -370,7 +371,7 @@ private fun BatteryOptimizationNotSupportedContent(
         )
         
         Text(
-            text = "your device doesn't require battery optimization settings. bitchat will run normally.",
+            text = "your device doesn't require battery optimization settings. TrackSure will run normally.",
             style = MaterialTheme.typography.bodyMedium.copy(
                 fontFamily = FontFamily.Monospace,
                 color = colorScheme.onBackground.copy(alpha = 0.8f)
@@ -393,5 +394,30 @@ private fun BatteryOptimizationNotSupportedContent(
                 )
             )
         }
+    }
+}
+@Preview(showBackground = true, name = "State: Optimization Disabled")
+@Composable
+fun BatteryOptimizationDisabledPreview() {
+    MaterialTheme {
+        BatteryOptimizationScreen(
+            status = BatteryOptimizationStatus.DISABLED,
+            onDisableBatteryOptimization = {},
+            onRetry = {},
+            onSkip = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "State: Not Supported")
+@Composable
+fun BatteryOptimizationNotSupportedPreview() {
+    MaterialTheme {
+        BatteryOptimizationScreen(
+            status = BatteryOptimizationStatus.NOT_SUPPORTED,
+            onDisableBatteryOptimization = {},
+            onRetry = {},
+            onSkip = {}
+        )
     }
 }

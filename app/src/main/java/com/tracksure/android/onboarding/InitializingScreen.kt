@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 /**
@@ -59,7 +60,7 @@ fun InitializingScreen(modifier: Modifier) {
         ) {
             // App title
             Text(
-                text = "bitchat",
+                text = "TrackSure",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
@@ -240,4 +241,27 @@ fun InitializationErrorScreen(
             }
         }
     }
+}
+
+@Preview(showBackground = true, name = "Loading Screen")
+@Composable
+fun InitializingScreenPreview() {
+    // You can wrap this in your app's theme for correct styling
+    // YourAppTheme {
+    InitializingScreen(modifier = Modifier.fillMaxSize())
+    // }
+}
+
+@Preview(showBackground = true, name = "Error Screen")
+@Composable
+fun InitializationErrorScreenPreview() {
+    // You can wrap this in your app's theme for correct styling
+    // YourAppTheme {
+    InitializationErrorScreen(
+        modifier = Modifier.fillMaxSize(),
+        errorMessage = "Bluetooth permissions are required for the mesh network to function. Please grant them in settings.",
+        onRetry = {},
+        onOpenSettings = {}
+    )
+    // }
 }

@@ -20,12 +20,24 @@ class MeshForegroundService : Service()
         private const val NOTIFICATION_ID=101
         private const val NOTIFICATION_CHANNEL_ID = "MeshNetworkServiceChannel"
         private const val TAG = "MeshForegroundService"
+        var instance: BluetoothMeshService? = null
+
     }
+
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "ForegrounServiceisbeingCreated...")
-        meshService = BluetoothMeshService(applicationContext)
+        Log.d(TAG, "ForegroundService is being Created...")
+
+        // --- FIX 2: Reuse existing instance if MainActivity created it ---
+        if (instance != null) {
+            Log.d(TAG, "Reusing existing BluetoothMeshService instance")
+            meshService = instance!!
+        } else {
+            Log.d(TAG, "Creating NEW BluetoothMeshService instance")
+            meshService = BluetoothMeshService(applicationContext)
+            instance = meshService
+        }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "ForegroundServiceisbeingStarted...")
@@ -45,6 +57,7 @@ class MeshForegroundService : Service()
         super.onDestroy()
         Log.d(TAG, "Foreground service is being destroyed")
         meshService.stopServices()
+        instance = null
     }
 
     override fun onBind(intent: Intent?): IBinder? {

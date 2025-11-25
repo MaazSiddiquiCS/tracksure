@@ -70,7 +70,12 @@ dependencies {
     // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.bundles.compose)
-    
+
+
+    // OpenStreetMap (Free Alternative)
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
+    implementation("org.osmdroid:osmdroid-wms:6.1.18")
+
     // Lifecycle
     implementation(libs.bundles.lifecycle)
     

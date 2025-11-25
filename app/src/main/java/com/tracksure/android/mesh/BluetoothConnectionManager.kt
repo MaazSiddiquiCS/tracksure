@@ -14,26 +14,26 @@ import kotlinx.coroutines.flow.collect
  * Coordinates smaller, focused components for better maintainability
  */
 class BluetoothConnectionManager(
-    private val context: Context, 
+    private val context: Context,
     private val myPeerID: String,
     private val fragmentManager: FragmentManager? = null
 ) : PowerManagerDelegate {
-    
+
     companion object {
         private const val TAG = "BluetoothConnectionManager"
     }
-    
+
     // Core Bluetooth components
-    private val bluetoothManager: BluetoothManager = 
+    private val bluetoothManager: BluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
-    
+
     // Power management
     private val powerManager = PowerManager(context.applicationContext)
-    
+
     // Coroutines
     private val connectionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    
+
     // Component managers
     private val permissionManager = BluetoothPermissionManager(context)
     private val connectionTracker = BluetoothConnectionTracker(connectionScope, powerManager)
@@ -59,7 +59,7 @@ class BluetoothConnectionManager(
             packetHandler?.invoke(routedPacket)
             delegate?.onPacketReceived(packet, peerID, device)
         }
-        
+
         override fun onDeviceConnected(device: BluetoothDevice) {
             delegate?.onDeviceConnected(device)
         }
@@ -67,28 +67,28 @@ class BluetoothConnectionManager(
         override fun onDeviceDisconnected(device: BluetoothDevice) {
             delegate?.onDeviceDisconnected(device)
         }
-        
+
         override fun onRSSIUpdated(deviceAddress: String, rssi: Int) {
             delegate?.onRSSIUpdated(deviceAddress, rssi)
         }
     }
-    
+
     private val serverManager = BluetoothGattServerManager(
         context, connectionScope, connectionTracker, permissionManager, powerManager, componentDelegate
     )
     private val clientManager = BluetoothGattClientManager(
         context, connectionScope, connectionTracker, permissionManager, powerManager, componentDelegate
     )
-    
+
     // Service state
     private var isActive = false
-    
+
     // Delegate for callbacks
     var delegate: BluetoothConnectionManagerDelegate? = null
-    
+
     // Public property for address-peer mapping
     val addressPeerMap get() = connectionTracker.addressPeerMap
-    
+
     init {
         powerManager.delegate = this
         // Observe debug settings to enforce role state while active
@@ -130,23 +130,23 @@ class BluetoothConnectionManager(
             }
         } catch (_: Exception) { }
     }
-    
+
     /**
      * Start all Bluetooth services with power optimization
      */
     fun startServices(): Boolean {
         Log.i(TAG, "Starting power-optimized Bluetooth services...")
-        
+
         if (!permissionManager.hasBluetoothPermissions()) {
             Log.e(TAG, "Missing Bluetooth permissions")
             return false
         }
-        
+
         if (bluetoothAdapter?.isEnabled != true) {
             Log.e(TAG, "Bluetooth is not enabled")
             return false
         }
-        
+
         try {
             isActive = true
 
@@ -164,10 +164,10 @@ class BluetoothConnectionManager(
             connectionScope.launch {
                 // Start connection tracker first
                 connectionTracker.start()
-                
+
                 // Start power manager
                 powerManager.start()
-                
+
                 // Start server/client based on debug settings
                 val dbg = try { com.tracksure.android.ui.debug.DebugSettingsManager.getInstance() } catch (_: Exception) { null }
                 val startServer = dbg?.gattServerEnabled?.value != false
@@ -192,45 +192,55 @@ class BluetoothConnectionManager(
                 } else {
                     Log.i(TAG, "GATT Client disabled by debug settings; not starting")
                 }
-                
+
+                delay(1000)
+                if (isActive) {
+                    Log.d(TAG, "🔄 Refreshing BLE Advertising/Scanning...")
+                    serverManager.stop()
+                    clientManager.stop()
+                    delay(200)
+                    serverManager.start()
+                    clientManager.start()
+                }
+                startScanWatchdog()
                 Log.i(TAG, "Bluetooth services started successfully")
             }
-            
+
             return true
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start Bluetooth services: ${e.message}")
             isActive = false
             return false
         }
     }
-    
+
     /**
      * Stop all Bluetooth services with proper cleanup
      */
     fun stopServices() {
         Log.i(TAG, "Stopping power-optimized Bluetooth services")
-        
+
         isActive = false
-        
+
         connectionScope.launch {
             // Stop component managers
             clientManager.stop()
             serverManager.stop()
-            
+
             // Stop power manager
             powerManager.stop()
-            
+
             // Stop connection tracker
             connectionTracker.stop()
-            
+
             // Cancel the coroutine scope
-            connectionScope.cancel()
-            
+            connectionScope.coroutineContext.cancelChildren()
+
             Log.i(TAG, "All Bluetooth services stopped")
         }
     }
-    
+
     /**
      * Set app background state for power optimization
      */
@@ -244,7 +254,7 @@ class BluetoothConnectionManager(
      */
     fun broadcastPacket(routed: RoutedPacket) {
         if (!isActive) return
-        
+
         packetBroadcaster.broadcastPacket(
             routed,
             serverManager.getGattServer(),
@@ -268,7 +278,7 @@ class BluetoothConnectionManager(
             serverManager.getCharacteristic()
         )
     }
-    
+
 
     // Expose role controls for debug UI
     fun startServer() { connectionScope.launch { serverManager.start() } }
@@ -325,7 +335,7 @@ class BluetoothConnectionManager(
      * Get connected device count
      */
     fun getConnectedDeviceCount(): Int = connectionTracker.getConnectedDeviceCount()
-    
+
     /**
      * Get debug information including power management
      */
@@ -343,16 +353,37 @@ class BluetoothConnectionManager(
             appendLine(connectionTracker.getDebugInfo())
         }
     }
-    
+    /**
+     * Periodically restarts the scanner to prevent Android BLE from stalling.
+     * This fixes the issue where you need to restart the app to see new peers.
+     */
+    private fun startScanWatchdog() {
+        connectionScope.launch {
+            while (isActive) {
+                // Wait 45 seconds
+                delay(45000)
+
+                if (isActive) {
+                    Log.d(TAG, "🔄 Watchdog: Refreshing BLE Scan to find new peers...")
+
+                    // Toggle Client (Scanner) only
+                    // We keep Server (Advertiser) running so we remain visible to others
+                    clientManager.stop()
+                    delay(500)
+                    clientManager.start()
+                }
+            }
+        }
+    }
     // MARK: - PowerManagerDelegate Implementation
-    
+
     override fun onPowerModeChanged(newMode: PowerManager.PowerMode) {
         Log.i(TAG, "Power mode changed to: $newMode")
-        
+
         connectionScope.launch {
             // Avoid rapid scan restarts by checking if we need to change scan behavior
             val wasUsingDutyCycle = powerManager.shouldUseDutyCycle()
-            
+
             // Update advertising with new power settings if server enabled
             val serverEnabled = try { com.tracksure.android.ui.debug.DebugSettingsManager.getInstance().gattServerEnabled.value } catch (_: Exception) { true }
             if (serverEnabled) {
@@ -360,7 +391,7 @@ class BluetoothConnectionManager(
             } else {
                 serverManager.stop()
             }
-            
+
             // Only restart scanning if the duty cycle behavior changed
             val nowUsingDutyCycle = powerManager.shouldUseDutyCycle()
             if (wasUsingDutyCycle != nowUsingDutyCycle) {
@@ -374,7 +405,7 @@ class BluetoothConnectionManager(
             } else {
                 Log.d(TAG, "Duty cycle behavior unchanged, keeping existing scan state")
             }
-            
+
             // Enforce connection limits
             connectionTracker.enforceConnectionLimits()
             // Best-effort server cap
@@ -384,11 +415,11 @@ class BluetoothConnectionManager(
             } catch (_: Exception) { }
         }
     }
-    
+
     override fun onScanStateChanged(shouldScan: Boolean) {
         clientManager.onScanStateChanged(shouldScan)
     }
-    
+
     // MARK: - Private Implementation - All moved to component managers
 }
 

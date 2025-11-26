@@ -30,13 +30,12 @@ class MeshForegroundService : Service()
         Log.d(TAG, "ForegroundService is being Created...")
 
         // --- FIX 2: Reuse existing instance if MainActivity created it ---
-        if (instance != null) {
-            Log.d(TAG, "Reusing existing BluetoothMeshService instance")
-            meshService = instance!!
-        } else {
-            Log.d(TAG, "Creating NEW BluetoothMeshService instance")
+        if (instance == null) {
             meshService = BluetoothMeshService(applicationContext)
             instance = meshService
+        } else {
+            // If instance exists, use it (avoids resetting connections)
+            meshService = instance!!
         }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

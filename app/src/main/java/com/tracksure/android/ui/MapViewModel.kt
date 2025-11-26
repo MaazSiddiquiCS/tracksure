@@ -2,6 +2,7 @@ package com.tracksure.android.ui
 
 import android.app.Application
 import android.util.Log
+//import androidx.compose.ui.test.cancel
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -11,6 +12,7 @@ import com.tracksure.android.geohash.LocationServiceManager
 import com.tracksure.android.mesh.BluetoothMeshService
 import com.tracksure.android.protocol.BitchatPacket
 import com.tracksure.android.protocol.MessageType
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 
@@ -41,8 +43,10 @@ class MapViewModel(
 
     private val locationServiceManager = LocationServiceManager(application)
 
+    private var locationTrackingJob: Job? = null
+
     init {
-        startTrackingLocation()
+       // startTrackingLocation()
     }
 
     companion object {
@@ -81,15 +85,22 @@ class MapViewModel(
     }
 
 
+    fun tryStartLocationTracking() {
+        // Cancel old job if exists
+        locationTrackingJob?.cancel()
 
-    private fun startTrackingLocation() {
-        viewModelScope.launch {
+        locationTrackingJob = viewModelScope.launch {
             try {
+                Log.d(TAG, "Starting Location Flow collection...")
+
+                // This collects the Flow we fixed in Step 1
                 locationServiceManager.getLocationUpdates().collect { location ->
+
+                    // 1. Update Local UI
                     updateMyLocation(location.latitude, location.longitude)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start location tracking", e)
+                Log.e(TAG, "Location tracking error", e)
             }
         }
     }

@@ -245,7 +245,9 @@ class MainActivity : ComponentActivity() {
 
                 // Add the callback
                 onBackPressedDispatcher.addCallback(this, backCallback)
-
+                LaunchedEffect(Unit) {
+                    mapViewModel.tryStartLocationTracking()
+                }
                 // Use MapScreen instead of ChatScreen
                 MapScreen(
                     viewModel = mapViewModel,
@@ -527,6 +529,7 @@ class MainActivity : ComponentActivity() {
                     handleOnboardingFailed("Some permissions were revoked...")
                     return@launch
                 }
+
                 // 2. WIRE UP THE DELEGATE HERE
                 // We access the meshService directly from the ViewModel
                 val meshService = mapViewModel.meshService
@@ -555,7 +558,6 @@ class MainActivity : ComponentActivity() {
                 }
                 mainViewModel.updateOnboardingState(OnboardingState.COMPLETE)
                 Log.d("MainActivity", "Mesh service delegate connected")
-
                 handleNotificationIntent(intent)
                 delay(500)
                 mainViewModel.updateOnboardingState(OnboardingState.COMPLETE)

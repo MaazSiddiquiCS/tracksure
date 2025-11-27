@@ -1,5 +1,6 @@
 package com.tracksure.android.mesh
 
+import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.util.Log
 import com.tracksure.android.crypto.EncryptionService
@@ -42,7 +43,7 @@ class BluetoothMeshService(private val context: Context) {
 
     // My peer identification - derived from persisted Noise identity fingerprint (first 16 hex chars)
     val myPeerID: String = encryptionService.getIdentityFingerprint().take(16)
-    private val peerManager = PeerManager()
+    val peerManager = PeerManager()
     private val fragmentManager = FragmentManager()
     private val securityManager = SecurityManager(encryptionService, myPeerID)
     private val storeForwardManager = StoreForwardManager()
@@ -487,6 +488,26 @@ class BluetoothMeshService(private val context: Context) {
                 val fromPeer = routed.peerID ?: return
                 val req = RequestSyncPacket.decode(routed.packet.payload) ?: return
                 gossipSyncManager.handleRequestSync(fromPeer, req)
+            }
+            override fun handleLocationUpdate(routed: RoutedPacket) {
+                val peerID = routed.peerID ?: return
+                val payloadStr = routed.packet.payload.toString(Charsets.UTF_8)
+
+                try {
+                    // Assuming your payload is "lat,lng" (e.g., "37.7749,-122.4194")
+                    val parts = payloadStr.split(",")
+                    if (parts.size >= 2) {
+                        val lat = parts[0].trim().toDouble()
+                        val lng = parts[1].trim().toDouble()
+
+                        // Store in PeerManager
+                        peerManager.updatePeerLocation(peerID, lat, lng)
+                        Log.d(TAG, "Stored location for $peerID: $lat, $lng")
+                        delegate?.handleLocationUpdate(routed)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse location: $payloadStr", e)
+                }
             }
         }
         
@@ -1196,7 +1217,28 @@ class BluetoothMeshService(private val context: Context) {
     }
     
     // MARK: - Panic Mode Support
-    
+    fun broadcastLocation(latitude: Double, longitude: Double) {
+        // Create a simple string payload "lat,lng"
+        val payloadString = "$latitude,$longitude"
+        val payload = payloadString.toByteArray(Charsets.UTF_8)
+
+        val packet = BitchatPacket(
+            version = 1u,
+            type = MessageType.LOCATION_UPDATE.value, // Ensure this enum exists in MessageType
+            senderID = hexStringToByteArray(myPeerID),
+            recipientID = SpecialRecipients.BROADCAST,
+            timestamp = System.currentTimeMillis().toULong(),
+            payload = payload,
+            ttl = MAX_TTL
+        )
+
+        // Sign and Broadcast
+        val signedPacket = signPacketBeforeBroadcast(packet)
+        connectionManager.broadcastPacket(RoutedPacket(signedPacket))
+        Log.d(TAG, "🌍 Broadcasted Location: $payloadString")
+    }
+
+
     /**
      * Clear all internal mesh service data (for panic mode)
      */
@@ -1243,4 +1285,28 @@ interface BluetoothMeshDelegate {
     fun getNickname(): String?
     fun isFavorite(peerID: String): Boolean
     // registerPeerPublicKey REMOVED - fingerprints now handled centrally in PeerManager
+    fun onDeviceConnected(device: BluetoothDevice)
+    fun onDeviceDisconnected(device: BluetoothDevice)
+    fun onRSSIUpdated(deviceAddress: String, rssi: Int)
+
+    // Packet Events
+    fun onPacketReceived(packet: BitchatPacket, peerID: String, device: BluetoothDevice?)
+
+    // Routing/Message Events
+    fun handleMessage(routed: RoutedPacket)
+    fun handleAnnounce(routed: RoutedPacket)
+    fun handleLocationUpdate(routed: RoutedPacket) // <--- Crucial for your map
+    fun handleLeave(routed: RoutedPacket)
+    fun handleRequestSync(routed: RoutedPacket)
+    fun handleNoiseHandshake(routed: RoutedPacket)
+    fun handleNoiseEncrypted(routed: RoutedPacket)
+    fun relayPacket(routed: RoutedPacket)
+
+    // Protocol Hooks
+    fun handleFragment(packet: BitchatPacket): BitchatPacket?
+    fun validatePacketSecurity(packet: BitchatPacket, peerID: String): Boolean
+    fun updatePeerLastSeen(peerID: String)
+    fun getNetworkSize(): Int
+    fun getBroadcastRecipient(): ByteArray
+    fun getPeerNickname(peerID: String): String?
 }

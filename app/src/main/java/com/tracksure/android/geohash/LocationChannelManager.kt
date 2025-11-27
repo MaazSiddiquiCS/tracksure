@@ -253,49 +253,48 @@ class LocationChannelManager private constructor(private val context: Context) {
         }
 
         Log.d(TAG, "Requesting one-shot location")
-        
+
         try {
             // Try to get last known location from all available providers
-            var lastKnownLocation: Location? = null
-            
+            var bestCache: Location? = null
+
             // Get all available providers and try each one
             val providers = locationManager.getProviders(true)
             for (provider in providers) {
                 val location = locationManager.getLastKnownLocation(provider)
                 if (location != null) {
                     // If we find a location, check if it's more recent than what we have
-                    if (lastKnownLocation == null || location.time > lastKnownLocation.time) {
-                        lastKnownLocation = location
+                    if (bestCache == null || location.time > bestCache.time) {
+                        bestCache = location
                     }
                 }
             }
 
-            if (lastKnownLocation == null) {
-                lastKnownLocation = lastLocation;
-            }
-            
-            // Use last known location if we have one
-            if (lastKnownLocation != null) {
-                Log.d(TAG, "Using last known location: ${lastKnownLocation.latitude}, ${lastKnownLocation.longitude}")
-                lastLocation = lastKnownLocation
-                _isLoadingLocation.postValue(false) // Make sure loading state is off
-                computeChannels(lastKnownLocation)
-                reverseGeocodeIfNeeded(lastKnownLocation)
+            // --- FIX START: Check freshness of cache ---
+            // Only use cached location if it is less than 10 seconds old
+            val isFresh = bestCache != null && (System.currentTimeMillis() - bestCache.time < 10000)
+
+            if (isFresh) {
+                Log.d(TAG, "Using FRESH cached location: ${bestCache!!.latitude}, ${bestCache.longitude}")
+                lastLocation = bestCache
+                _isLoadingLocation.postValue(false)
+                computeChannels(bestCache)
+                reverseGeocodeIfNeeded(bestCache)
             } else {
-                Log.d(TAG, "No last known location available")
-                // Set loading state to true so UI can show a spinner
+                // Cache is too old or missing, force hardware scan
+                Log.d(TAG, "Cached location stale or missing. Requesting FRESH location...")
                 _isLoadingLocation.postValue(true)
-                
-                // Request a fresh location only when we don't have a last known location
-                Log.d(TAG, "Requesting fresh location...")
                 requestFreshLocation()
             }
+            // --- FIX END ---
+
         } catch (e: SecurityException) {
             Log.e(TAG, "Security exception requesting location: ${e.message}")
             _isLoadingLocation.postValue(false) // Turn off loading state on error
             updatePermissionState()
         }
     }
+
     
     // One-time location listener to get a fresh location update
     private val oneShotLocationListener = object : LocationListener {

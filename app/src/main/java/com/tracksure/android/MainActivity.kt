@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -109,6 +110,11 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .padding(innerPadding)
                     )
+                }
+            }
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    ChatScreen(viewModel = chatViewModel)
                 }
             }
         }
@@ -233,14 +239,14 @@ class MainActivity : ComponentActivity() {
                 val backCallback = object : OnBackPressedCallback(true) {
                     override fun handleOnBackPressed() {
                         // Let ChatViewModel handle navigation state
-                        val handled = chatViewModel.handleBackPressed()
-                        if (!handled) {
-                            // If ChatViewModel doesn't handle it, disable this callback
-                            // and let the system handle it (which will exit the app)
-                            this.isEnabled = false
-                            onBackPressedDispatcher.onBackPressed()
-                            this.isEnabled = true
-                        }
+//                        val handled = chatViewModel.handleBackPressed()
+//                        if (!handled) {
+//                            // If ChatViewModel doesn't handle it, disable this callback
+//                            // and let the system handle it (which will exit the app)
+//                            this.isEnabled = false
+//                            onBackPressedDispatcher.onBackPressed()
+//                            this.isEnabled = true
+                    //    }
                     }
                 }
 
@@ -664,7 +670,7 @@ class MainActivity : ComponentActivity() {
         if (mainViewModel.onboardingState.value == OnboardingState.COMPLETE) {
             // Set app foreground state
             //meshService.connectionManager.setAppBackgroundState(false)
-            chatViewModel.setAppBackgroundState(false)
+            //chatViewModel.setAppBackgroundState(false)
 
             // Check if Bluetooth was disabled while app was backgrounded
             val currentBluetoothStatus = bluetoothStatusManager.checkBluetoothStatus()
@@ -693,7 +699,7 @@ class MainActivity : ComponentActivity() {
         if (mainViewModel.onboardingState.value == OnboardingState.COMPLETE) {
             // Set app background state
             //meshService.connectionManager.setAppBackgroundState(true)
-            chatViewModel.setAppBackgroundState(true)
+           // chatViewModel.setAppBackgroundState(true)
         }
     }
     
@@ -720,10 +726,10 @@ class MainActivity : ComponentActivity() {
                     Log.d("MainActivity", "Opening private chat with $senderNickname (peerID: $peerID) from notification")
                     
                     // Open the private chat with this peer
-                    chatViewModel.startPrivateChat(peerID)
+                    //chatViewModel.startPrivateChat(peerID)
                     
                     // Clear notifications for this sender since user is now viewing the chat
-                    chatViewModel.clearNotificationsForSender(peerID)
+                   // chatViewModel.clearNotificationsForSender(peerID)
                 }
             }
             
@@ -744,13 +750,13 @@ class MainActivity : ComponentActivity() {
                     }
                     val geohashChannel = com.tracksure.android.geohash.GeohashChannel(level, geohash)
                     val channelId = com.tracksure.android.geohash.ChannelID.Location(geohashChannel)
-                    chatViewModel.selectLocationChannel(channelId)
+                   // chatViewModel.selectLocationChannel(channelId)
                     
                     // Update current geohash state for notifications
-                    chatViewModel.setCurrentGeohash(geohash)
+                   // chatViewModel.setCurrentGeohash(geohash)
                     
                     // Clear notifications for this geohash since user is now viewing it
-                    chatViewModel.clearNotificationsForGeohash(geohash)
+                    //chatViewModel.clearNotificationsForGeohash(geohash)
                 }
             }
         }

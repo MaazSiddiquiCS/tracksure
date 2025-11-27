@@ -79,7 +79,11 @@ dependencies {
     
     // Permissions
     implementation(libs.accompanist.permissions)
-    
+
+    // OpenStreetMap (Free Alternative)
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
+    implementation("org.osmdroid:osmdroid-wms:6.1.18")
+
     // Cryptography
     implementation(libs.bundles.cryptography)
     

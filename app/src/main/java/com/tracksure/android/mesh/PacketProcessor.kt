@@ -120,7 +120,7 @@ class PacketProcessor(private val myPeerID: String) {
     private suspend fun handleLocationPacket(routed: RoutedPacket) {
         val locationString= routed.packet.payload.toString(Charsets.UTF_8)
         Log.d("PacketProcessor", "Received location update from ${formatPeerForLog(routed.peerID?:"unknown peer")}: $locationString")
-        //delegate?.handleLocationUpdate(routed)
+        delegate?.handleLocationUpdate(routed)
     }
     /**
      * Handle received packet - core protocol logic (exact same as iOS)
@@ -335,7 +335,9 @@ interface PacketProcessorDelegate {
     fun handleLeave(routed: RoutedPacket)
     fun handleFragment(packet: BitchatPacket): BitchatPacket?
     fun handleRequestSync(routed: RoutedPacket)
-    
+    fun handleLocationUpdate(routed: RoutedPacket)
+
+
     // Communication
     fun sendAnnouncementToPeer(peerID: String)
     fun sendCachedMessages(peerID: String)

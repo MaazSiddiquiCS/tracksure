@@ -1,12 +1,5 @@
 package com.tracksure.android.ui
 
-/**
- * UI constants/utilities for nickname rendering.
- */
-const val MAX_NICKNAME_LENGTH: Int = 15
-
-fun truncateNickname(name: String, maxLen: Int = MAX_NICKNAME_LENGTH): String {
-    return if (name.length <= maxLen) name else name.take(maxLen)
-}
-
-
+// Map Constants
+const val DEFAULT_ZOOM_LEVEL = 15.0
+const val MY_LOCATION_ZOOM = 18.0

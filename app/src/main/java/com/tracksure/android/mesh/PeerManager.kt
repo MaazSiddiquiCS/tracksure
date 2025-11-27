@@ -17,7 +17,9 @@ data class PeerInfo(
     var noisePublicKey: ByteArray?,
     var signingPublicKey: ByteArray?,      // NEW: Ed25519 public key for verification
     var isVerifiedNickname: Boolean,       // NEW: Verification status flag
-    var lastSeen: Long  // Using Long instead of Date for simplicity
+    var lastSeen: Long,
+    var latitude: Double? = null,
+    var longitude: Double? = null// Using Long instead of Date for simplicity
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -39,7 +41,8 @@ data class PeerInfo(
         } else if (other.signingPublicKey != null) return false
         if (isVerifiedNickname != other.isVerifiedNickname) return false
         if (lastSeen != other.lastSeen) return false
-        
+        if (latitude != other.latitude) return false
+        if (longitude != other.longitude) return false
         return true
     }
     
@@ -163,7 +166,41 @@ class PeerManager {
     fun getVerifiedPeers(): Map<String, PeerInfo> {
         return peers.filterValues { it.isVerifiedNickname }
     }
+    fun updatePeerLocation(peerID: String, lat: Double, lng: Double) {
+        if (peerID == "unknown") return
+        val now = System.currentTimeMillis()
+        val existing = peers[peerID]
 
+        if (existing != null) {
+            // Update existing peer
+            peers[peerID] = existing.copy(
+                latitude = lat,
+                longitude = lng,
+                lastSeen = now
+            )
+        }
+        else {
+            // CREATE NEW PEER if they sent location but haven't announced yet
+            // We generate a temporary nickname from their ID
+            val shortId = peerID.take(4)
+            val newPeer = PeerInfo(
+                id = peerID,
+                nickname = "Peer $shortId", // Placeholder until Announce arrives
+                isConnected = true,
+                isDirectConnection = true, // Assume direct if we got a packet
+                noisePublicKey = null,
+                signingPublicKey = null,
+                isVerifiedNickname = false,
+                lastSeen = now,
+                latitude = lat,
+                longitude = lng
+            )
+            peers[peerID] = newPeer
+            Log.d(TAG, "🆕 Created new peer from location data: Peer $shortId at $lat, $lng")
+        }
+            // Trigger UI update
+            notifyPeerListUpdate()
+    }
     /**
      * Set whether a peer is directly connected over Bluetooth.
      * Triggers a peer list update to refresh UI badges.
@@ -205,6 +242,7 @@ class PeerManager {
         // Clean up stale peer IDs with the same nickname (exact same logic as iOS)
         val now = System.currentTimeMillis()
         val stalePeerIDs = mutableListOf<String>()
+
         peers.forEach { (existingPeerID, info) ->
             if (info.nickname == nickname && existingPeerID != peerID) {
                 val wasRecentlySeen = (now - info.lastSeen) < 10000
@@ -260,7 +298,9 @@ class PeerManager {
         
         // Also remove fingerprint mappings
         fingerprintManager.removePeer(peerID)
-        
+        if (peers.remove(peerID) != null) {
+            if (notifyDelegate) notifyPeerListUpdate()
+        }
         if (notifyDelegate && removed != null) {
             // Notify specific removal event then list update
             try { delegate?.onPeerRemoved(peerID) } catch (_: Exception) {}
@@ -415,10 +455,17 @@ class PeerManager {
         managerScope.launch {
             while (isActive) {
                 delay(CLEANUP_INTERVAL)
-                cleanupStalePeers()
+                val now = System.currentTimeMillis()
+                val stalePeers = peers.filterValues { (now - it.lastSeen) > STALE_PEER_TIMEOUT }.keys
+                if (stalePeers.isNotEmpty()) {
+                    Log.d(TAG, "Cleaning up ${stalePeers.size} stale peers")
+                    stalePeers.forEach { removePeer(it) }
+                }
             }
         }
     }
+
+    // Required for compilation of provided file:
     
     /**
      * Clean up stale peers (same 3-minute threshold as iOS)

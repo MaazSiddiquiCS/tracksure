@@ -21,6 +21,30 @@ class ChatViewModel(
 
     private val state = ChatState()
     private val locationChannelManager = LocationChannelManager.getInstance(application)
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    // This is the ONLY runnable we want.
+    private val locationRunnable = object : Runnable {
+        override fun run() {
+            // 1. Update My Location
+            val loc = locationChannelManager.getCurrentLocation()
+            if (loc != null) {
+                state.setMyLocation(loc)
+
+                // 2. Broadcast if needed
+                val now = System.currentTimeMillis()
+                if (now - lastBroadcastTime > BROADCAST_INTERVAL) {
+                    broadcastMyLocation(loc)
+                }
+            }
+
+            // 3. Explicitly refresh peer list
+            refreshPeerList()
+
+            // Loop
+            mainHandler.postDelayed(this, 2000)
+        }
+    }
 
     // Expose LiveData
     val peerLocations: LiveData<Map<String, PeerInfo>> = state.peerLocations
@@ -30,7 +54,7 @@ class ChatViewModel(
     val connectedPeersCount: LiveData<Int> = state.connectedPeersCount
 
     private var lastBroadcastTime = 0L
-    private val BROADCAST_INTERVAL = 5000L // Broadcast every 5s to ensure peers see us
+    private val BROADCAST_INTERVAL = 5000L
 
     init {
         meshService.delegate = this
@@ -47,33 +71,13 @@ class ChatViewModel(
         locationChannelManager.enableLocationChannels()
         locationChannelManager.beginLiveRefresh(2000)
 
-        startLocationLoop()
+        // START THE LOOP
+        mainHandler.post(locationRunnable)
+
+        // REMOVED: startLocationLoop() -> This was creating a zombie loop
     }
 
-    private fun startLocationLoop() {
-        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        mainHandler.post(object : Runnable {
-            override fun run() {
-                // 1. Update My Location
-                val loc = locationChannelManager.getCurrentLocation()
-                if (loc != null) {
-                    state.setMyLocation(loc)
-
-                    // 2. Broadcast if needed
-                    val now = System.currentTimeMillis()
-                    if (now - lastBroadcastTime > BROADCAST_INTERVAL) {
-                        broadcastMyLocation(loc)
-                    }
-                }
-
-                // 3. Explicitly refresh peer list from Manager every cycle
-                // This ensures stale peers are removed and new ones appear
-                refreshPeerList()
-
-                mainHandler.postDelayed(this, 2000)
-            }
-        })
-    }
+    // REMOVED: private fun startLocationLoop() {...} -> Delete this function entirely
 
     private fun broadcastMyLocation(loc: Location) {
         Log.d("ChatViewModel", "📡 Broadcasting my location: ${loc.latitude}, ${loc.longitude}")
@@ -132,7 +136,22 @@ class ChatViewModel(
         refreshPeerList()
     }
 
-    // Stubs
+    override fun onCleared() {
+        super.onCleared()
+        Log.d("ChatViewModel", "🛑 App closing, stopping services...")
+
+        // Stop UI Loop - This now works because there is only one runnable
+        mainHandler.removeCallbacks(locationRunnable)
+
+        // Stop Location Updates
+        locationChannelManager.endLiveRefresh()
+
+        // Stop Bluetooth/Mesh
+        meshService.connectionManager.stopServices()
+        meshService.peerManager.shutdown()
+    }
+
+    // ... Stubs remain the same ...
     override fun onPacketReceived(packet: BitchatPacket, peerID: String, device: android.bluetooth.BluetoothDevice?) {}
     override fun onRSSIUpdated(deviceAddress: String, rssi: Int) {}
     override fun handleMessage(routed: RoutedPacket) {}

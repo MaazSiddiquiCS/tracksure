@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.core.content.ContextCompat
 
-object ChatUIUtils {
+object MapUIUtils {
     // Helper to create bitmap markers if needed later
     fun getBitmapFromVector(context: Context, vectorResId: Int): Bitmap? {
         val drawable = ContextCompat.getDrawable(context, vectorResId) ?: return null

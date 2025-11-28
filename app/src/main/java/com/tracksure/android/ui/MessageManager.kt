@@ -8,7 +8,7 @@
 ///**
 // * Handles all message-related operations including deduplication and organization
 // */
-//class MessageManager(private val state: ChatState) {
+//class MessageManager(private val state: MapState) {
 //
 //    // Message deduplication - FIXED: Prevent duplicate messages from dual connection paths
 //    private val processedUIMessages = Collections.synchronizedSet(mutableSetOf<String>())

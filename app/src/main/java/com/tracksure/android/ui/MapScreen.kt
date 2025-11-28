@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.tracksure.android.mesh.PeerInfo
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -29,7 +28,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel) {
+fun MapScreen(viewModel: MapViewModel) {
     val context = LocalContext.current
 
     // Observe Data
@@ -172,7 +171,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
             // 3. BOTTOM SHEET
             if (selectedPeerId != null) {
                 peerLocations[selectedPeerId]?.let { info ->
-                    ChatUserSheet(
+                    MapUserSheet(
                         isPresented = true,
                         onDismiss = { selectedPeerId = null },
                         targetNickname = info.nickname,

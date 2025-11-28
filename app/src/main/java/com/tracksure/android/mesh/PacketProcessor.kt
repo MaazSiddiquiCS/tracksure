@@ -147,7 +147,7 @@ class PacketProcessor(private val myPeerID: String) {
 
         var validPacket = true
         Log.d(TAG, "Processing packet type ${messageType} from ${formatPeerForLog(peerID)}")
-        // Verbose logging to debug manager (and chat via ChatViewModel observer)
+        // Verbose logging to debug manager (and chat via MapViewModel observer)
         try {
             val mt = messageType?.name ?: packet.type.toString()
             val routeDevice = routed.relayAddress

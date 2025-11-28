@@ -430,7 +430,7 @@ class BluetoothMeshService(private val context: Context) {
                                     peerManager.setDirectConnection(pid, true)
                                     // Also push reactive directness state to UI (best-effort)
                                     try {
-                                        // Note: UI observes via didUpdatePeerList, but we can also update ChatState on a timer
+                                        // Note: UI observes via didUpdatePeerList, but we can also update MapState on a timer
                                     } catch (_: Exception) { }
                                 }
                             } catch (_: Exception) { }

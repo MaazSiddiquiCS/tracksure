@@ -13,7 +13,7 @@
 // * Handles channel management including creation, joining, leaving, and encryption
 // */
 //class ChannelManager(
-//    private val state: ChatState,
+//    private val state: MapState,
 //    private val messageManager: MessageManager,
 //    private val dataManager: DataManager,
 //    private val coroutineScope: CoroutineScope

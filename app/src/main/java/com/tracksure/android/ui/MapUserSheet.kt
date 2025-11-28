@@ -14,7 +14,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatUserSheet(
+fun MapUserSheet(
     isPresented: Boolean,
     onDismiss: () -> Unit,
     targetNickname: String,

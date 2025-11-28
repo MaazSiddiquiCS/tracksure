@@ -80,7 +80,7 @@ MeshForegroundService.kt: Manages persistent BLE mesh networking and location tr
 BluetoothMeshService.kt: Core BLE mesh networking (central + peripheral roles).
 EncryptionService.kt: Cryptographic operations using BouncyCastle.
 BinaryProtocol.kt: Binary packet encoding/decoding for efficient data transfer.
-ChatScreen.kt: Jetpack Compose UI with Material Design 3.
+MapScreen.kt: Jetpack Compose UI with Material Design 3.
 
 Dependencies
 

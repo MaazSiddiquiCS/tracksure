@@ -26,13 +26,13 @@
 //
 //
 ///**
-// * Sidebar components for ChatScreen
-// * Extracted from ChatScreen.kt for better organization
+// * Sidebar components for MapScreen
+// * Extracted from MapScreen.kt for better organization
 // */
 //
 //@Composable
 //fun SidebarOverlay(
-//    viewModel: ChatViewModel,
+//    viewModel: MapViewModel,
 //    onDismiss: () -> Unit,
 //    modifier: Modifier = Modifier
 //) {
@@ -256,7 +256,7 @@
 //    nickname: String,
 //    colorScheme: ColorScheme,
 //    selectedPrivatePeer: String?,
-//    viewModel: ChatViewModel,
+//    viewModel: MapViewModel,
 //    onPrivateChatStart: (String) -> Unit
 //) {
 //    Column(modifier = modifier) {
@@ -518,7 +518,7 @@
 //    isFavorite: Boolean,
 //    hasUnreadDM: Boolean,
 //    colorScheme: ColorScheme,
-//    viewModel: ChatViewModel,
+//    viewModel: MapViewModel,
 //    onItemClick: () -> Unit,
 //    onToggleFavorite: () -> Unit,
 //    unreadCount: Int = 0,

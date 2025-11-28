@@ -3,7 +3,7 @@
 //import android.app.Application
 //import android.util.Log
 //import androidx.lifecycle.LiveData
-//import com.tracksure.android.ui.ChatState
+//import com.tracksure.android.ui.MapState
 //import com.tracksure.android.ui.GeoPerson
 //import java.util.Date
 //
@@ -14,7 +14,7 @@
 // */
 //class GeohashRepository(
 //    private val application: Application,
-//    private val state: ChatState,
+//    private val state: MapState,
 //    private val dataManager: com.tracksure.android.ui.DataManager
 //) {
 //    companion object { private const val TAG = "GeohashRepository" }

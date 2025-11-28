@@ -1,6 +1,6 @@
 //package com.tracksure.android.services
 //
-//import com.tracksure.android.ui.ChatState
+//import com.tracksure.android.ui.MapState
 //
 //object ConversationAliasResolver {
 //
@@ -42,7 +42,7 @@
 //    }
 //
 //    fun unifyChatsIntoPeer(
-//        state: ChatState,
+//        state: MapState,
 //        targetPeerID: String,
 //        keysToMerge: List<String>
 //    ) {

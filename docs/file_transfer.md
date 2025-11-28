@@ -173,7 +173,7 @@ Implementation files:
 - `app/src/main/java/com/bitchat/android/mesh/BluetoothPacketBroadcaster.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/mesh/BluetoothPacketBroadcaster.kt)
 - `app/src/main/java/com/bitchat/android/mesh/BluetoothConnectionManager.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/mesh/BluetoothConnectionManager.kt)
 - `app/src/main/java/com/bitchat/android/mesh/BluetoothMeshService.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/mesh/BluetoothMeshService.kt)
-- `app/src/main/java/com/bitchat/android/ui/ChatViewModel.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/ChatViewModel.kt)
+- `app/src/main/java/com/bitchat/android/ui/MapViewModel.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/MapViewModel.kt)
 
 
 ---
@@ -238,7 +238,7 @@ Files:
 
 Core files:
 
-- `app/src/main/java/com/bitchat/android/ui/ChatViewModel.kt` (sendVoiceNote) (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/ChatViewModel.kt)
+- `app/src/main/java/com/bitchat/android/ui/MapViewModel.kt` (sendVoiceNote) (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/MapViewModel.kt)
 - `app/src/main/java/com/bitchat/android/model/TrackSureFilePacket.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/model/TrackSureFilePacket.kt)
 - `app/src/main/java/com/bitchat/android/mesh/BluetoothMeshService.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/mesh/BluetoothMeshService.kt)
 - `app/src/main/java/com/bitchat/android/features/voice/VoiceRecorder.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/features/voice/VoiceRecorder.kt)
@@ -264,7 +264,7 @@ Core files:
 Core files:
 
 - `app/src/main/java/com/bitchat/android/features/media/ImageUtils.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/features/media/ImageUtils.kt)
-- `app/src/main/java/com/bitchat/android/ui/ChatViewModel.kt` (sendImageNote) (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/ChatViewModel.kt)
+- `app/src/main/java/com/bitchat/android/ui/MapViewModel.kt` (sendImageNote) (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/MapViewModel.kt)
 - `app/src/main/java/com/bitchat/android/mesh/BluetoothMeshService.kt` (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/mesh/BluetoothMeshService.kt)
 
 
@@ -409,7 +409,7 @@ UI composition and view model coordination:
 
 - `app/src/main/java/com/bitchat/android/ui/InputComponents.kt` — input field, overlays (recording), picker button, mic. (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/InputComponents.kt)
 - `app/src/main/java/com/bitchat/android/ui/MessageComponents.kt` — message rendering for text/audio/images including progress UIs and cancel overlays. (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/MessageComponents.kt)
-- `app/src/main/java/com/bitchat/android/ui/ChatViewModel.kt` — sendVoiceNote/sendImageNote, progress mapping, cancelMediaSend. (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/ChatViewModel.kt)
+- `app/src/main/java/com/bitchat/android/ui/MapViewModel.kt` — sendVoiceNote/sendImageNote, progress mapping, cancelMediaSend. (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/MapViewModel.kt)
 - `app/src/main/java/com/bitchat/android/ui/MessageManager.kt` — add/remove/update messages across main, private, and channels. (/Users/cc/git/bitchat-android/app/src/main/java/com/bitchat/android/ui/MessageManager.kt)
 
 Fullscreen image:

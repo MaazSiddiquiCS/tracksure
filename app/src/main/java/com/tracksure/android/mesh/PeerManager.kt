@@ -212,7 +212,7 @@ class PeerManager {
                 notifyPeerListUpdate()
                 // NEW: notify UI state (if available via delegate path) about directness change
                 try {
-                    // Best-effort: delegate path flows up to ChatViewModel via didUpdatePeerList
+                    // Best-effort: delegate path flows up to MapViewModel via didUpdatePeerList
                     // No direct reference to UI layer here by design.
                 } catch (_: Exception) { }
             }

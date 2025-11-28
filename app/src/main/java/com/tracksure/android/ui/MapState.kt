@@ -5,7 +5,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.tracksure.android.mesh.PeerInfo
 
-class ChatState {
+class MapState {
 
     // --- MAP DATA ---
     private val _peerLocations = MutableLiveData<Map<String, PeerInfo>>(emptyMap())

@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Permission explanation screen shown before requesting permissions
- * Explains why bitchat needs each permission and reassures users about privacy
+ * Explains why tracksure needs each permission and reassures users about privacy
  */
 @Composable
 fun PermissionExplanationScreen(
@@ -65,7 +65,7 @@ fun PermissionExplanationScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "bitchat",
+                        text = "tracksure",
                         style = MaterialTheme.typography.headlineLarge.copy(
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
@@ -223,7 +223,7 @@ private fun PermissionCategoryCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "bitchat does NOT track your location",
+                        text = "tracksure does NOT track your location",
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Medium,

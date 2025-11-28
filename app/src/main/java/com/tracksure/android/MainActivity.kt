@@ -112,11 +112,11 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    ChatScreen(viewModel = chatViewModel)
-                }
-            }
+//            MaterialTheme {
+//                Surface(modifier = Modifier.fillMaxSize()) {
+//                    ChatScreen(viewModel = chatViewModel)
+//                }
+//            }
         }
         
         // Collect state changes in a lifecycle-aware manner
@@ -251,8 +251,17 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // Add the callback - this will be automatically removed when the activity is destroyed
+                //onBackPressedDispatcher.addCallback(this, backCallback)
                 onBackPressedDispatcher.addCallback(this, backCallback)
-                ChatScreen(viewModel = chatViewModel)
+
+                // Ideally, for CHECKING/INITIALIZING, show a loading screen instead of ChatScreen
+                // to prevent initializing ViewModel services before permissions are granted.
+                if (onboardingState == OnboardingState.COMPLETE) {
+                    ChatScreen(viewModel = chatViewModel)
+                } else {
+                    InitializingScreen(modifier)
+                }
+                //ChatScreen(viewModel = chatViewModel)
             }
             
             OnboardingState.ERROR -> {
@@ -670,7 +679,7 @@ class MainActivity : ComponentActivity() {
         if (mainViewModel.onboardingState.value == OnboardingState.COMPLETE) {
             // Set app foreground state
             //meshService.connectionManager.setAppBackgroundState(false)
-            //chatViewModel.setAppBackgroundState(false)
+            chatViewModel.setAppBackgroundState(false)
 
             // Check if Bluetooth was disabled while app was backgrounded
             val currentBluetoothStatus = bluetoothStatusManager.checkBluetoothStatus()
@@ -699,7 +708,7 @@ class MainActivity : ComponentActivity() {
         if (mainViewModel.onboardingState.value == OnboardingState.COMPLETE) {
             // Set app background state
             //meshService.connectionManager.setAppBackgroundState(true)
-           // chatViewModel.setAppBackgroundState(true)
+           chatViewModel.setAppBackgroundState(true)
         }
     }
     

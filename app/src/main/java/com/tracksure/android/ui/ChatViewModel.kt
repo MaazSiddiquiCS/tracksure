@@ -3,6 +3,7 @@ package com.tracksure.android.ui
 import android.app.Application
 import android.location.Location
 import android.util.Log
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import com.tracksure.android.geohash.LocationChannelManager
@@ -12,6 +13,7 @@ import com.tracksure.android.mesh.PeerInfo
 import com.tracksure.android.model.BitchatMessage
 import com.tracksure.android.model.RoutedPacket
 import com.tracksure.android.protocol.BitchatPacket
+import com.tracksure.android.util.NotificationIntervalManager
 import kotlinx.coroutines.launch
 
 class ChatViewModel(
@@ -45,6 +47,11 @@ class ChatViewModel(
             mainHandler.postDelayed(this, 2000)
         }
     }
+    private val notificationManager = NotificationManager(
+        application.applicationContext,
+        NotificationManagerCompat.from(application.applicationContext),
+        NotificationIntervalManager()
+    )
 
     // Expose LiveData
     val peerLocations: LiveData<Map<String, PeerInfo>> = state.peerLocations
@@ -106,6 +113,11 @@ class ChatViewModel(
         // Update connectivity status based on peers or raw connection
         val hasRawConnection = meshService.connectionManager.getConnectedDeviceEntries().isNotEmpty()
         state.setIsConnected(count > 0 || hasRawConnection)
+    }
+
+    fun setAppBackgroundState(inBackground: Boolean) {
+        // Forward to notification manager for notification logic
+        notificationManager.setAppBackgroundState(inBackground)
     }
 
     // --- BluetoothMeshDelegate ---

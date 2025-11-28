@@ -18,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - fix(chat): cursor location and enhance message input with slash command styling
 
 ### Changed
-- refactor: remove context attribute at ChatViewModel.kt
+- refactor: remove context attribute at MapViewModel.kt
 - Refactor: Migrate MainViewModel to use StateFlow
 
 ### Improved

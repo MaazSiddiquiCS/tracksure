@@ -3,7 +3,7 @@
 //import android.app.Application
 //import android.util.Log
 //import com.tracksure.android.model.BitchatMessage
-//import com.tracksure.android.ui.ChatState
+//import com.tracksure.android.ui.MapState
 //import com.tracksure.android.ui.MessageManager
 //import kotlinx.coroutines.CoroutineScope
 //import kotlinx.coroutines.Dispatchers
@@ -19,7 +19,7 @@
 // */
 //class GeohashMessageHandler(
 //    private val application: Application,
-//    private val state: ChatState,
+//    private val state: MapState,
 //    private val messageManager: MessageManager,
 //    private val repo: GeohashRepository,
 //    private val scope: CoroutineScope,

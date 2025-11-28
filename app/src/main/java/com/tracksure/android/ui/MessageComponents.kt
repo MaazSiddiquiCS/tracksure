@@ -42,8 +42,8 @@
 //// VoiceNotePlayer moved to com.bitchat.android.ui.media.VoiceNotePlayer
 //
 ///**
-// * Message display components for ChatScreen
-// * Extracted from ChatScreen.kt for better organization
+// * Message display components for MapScreen
+// * Extracted from MapScreen.kt for better organization
 // */
 //
 //@Composable

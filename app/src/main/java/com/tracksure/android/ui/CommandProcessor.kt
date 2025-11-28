@@ -8,7 +8,7 @@
 // * Handles processing of IRC-style commands
 // */
 //class CommandProcessor(
-//    private val state: ChatState,
+//    private val state: MapState,
 //    private val messageManager: MessageManager,
 //    private val channelManager: ChannelManager,
 //    private val privateChatManager: PrivateChatManager
@@ -29,7 +29,7 @@
 //
 //    // MARK: - Command Processing
 //
-//    fun processCommand(command: String, meshService: BluetoothMeshService, myPeerID: String, onSendMessage: (String, List<String>, String?) -> Unit, viewModel: ChatViewModel? = null): Boolean {
+//    fun processCommand(command: String, meshService: BluetoothMeshService, myPeerID: String, onSendMessage: (String, List<String>, String?) -> Unit, viewModel: MapViewModel? = null): Boolean {
 //        if (!command.startsWith("/")) return false
 //
 //        val parts = command.split(" ")
@@ -129,7 +129,7 @@
 //        }
 //    }
 //
-//    private fun handleWhoCommand(meshService: BluetoothMeshService, viewModel: ChatViewModel? = null) {
+//    private fun handleWhoCommand(meshService: BluetoothMeshService, viewModel: MapViewModel? = null) {
 //        // Channel-aware who command (matches iOS behavior)
 //        val (peerList, contextDescription) = if (viewModel != null) {
 //            when (val selectedChannel = viewModel.selectedLocationChannel.value) {
@@ -423,7 +423,7 @@
 //
 //    // MARK: - Mention Autocomplete
 //
-//    fun updateMentionSuggestions(input: String, meshService: BluetoothMeshService, viewModel: ChatViewModel? = null) {
+//    fun updateMentionSuggestions(input: String, meshService: BluetoothMeshService, viewModel: MapViewModel? = null) {
 //        // Check if input contains @ and we're at the end of a word or at the end of input
 //        val atIndex = input.lastIndexOf('@')
 //        if (atIndex == -1) {

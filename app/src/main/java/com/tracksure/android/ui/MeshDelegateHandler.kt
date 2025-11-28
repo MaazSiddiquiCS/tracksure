@@ -13,7 +13,7 @@
 // * Handles all BluetoothMeshDelegate callbacks and routes them to appropriate managers
 // */
 //class MeshDelegateHandler(
-//    private val state: ChatState,
+//    private val state: MapState,
 //    private val messageManager: MessageManager,
 //    private val channelManager: ChannelManager,
 //    private val privateChatManager: PrivateChatManager,

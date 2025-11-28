@@ -11,8 +11,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ChatFloatingHeader() {
-    // Not strictly needed if Scaffold is used in ChatScreen,
+fun MapFloatingHeader() {
+    // Not strictly needed if Scaffold is used in MapScreen,
     // but here is a simple overlay header if you want one over the map
     Box(
         modifier = Modifier

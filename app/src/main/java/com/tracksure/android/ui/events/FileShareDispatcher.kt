@@ -2,7 +2,7 @@ package com.tracksure.android.ui.events
 
 /**
  * Lightweight dispatcher so lower-level UI (MessageInput) can trigger
- * file sending without holding a direct reference to ChatViewModel.
+ * file sending without holding a direct reference to MapViewModel.
  */
 object FileShareDispatcher {
     @Volatile private var handler: ((String?, String?, String) -> Unit)? = null

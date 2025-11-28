@@ -7,9 +7,9 @@ import android.os.Vibrator
 import android.os.VibratorManager
 
 /**
- * Utility functions for the ChatViewModel
+ * Utility functions for the MapViewModel
  */
-object ChatViewModelUtils {
+object MapViewModelUtils {
     
     /**
      * Trigger haptic feedback

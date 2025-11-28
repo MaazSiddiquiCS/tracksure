@@ -392,7 +392,7 @@
         errorLine1="    private val context: Context = application.applicationContext"
         errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/bitchat/android/ui/ChatViewModel.kt"
+            file="src/main/java/com/bitchat/android/ui/MapViewModel.kt"
             line="30"
             column="5"/>
     </issue>
@@ -403,7 +403,7 @@
         errorLine1="    var tripleClickCount by remember { mutableStateOf(0) }"
         errorLine2="                                       ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/bitchat/android/ui/ChatScreen.kt"
+            file="src/main/java/com/bitchat/android/ui/MapScreen.kt"
             line="62"
             column="40"/>
     </issue>
@@ -590,7 +590,7 @@
         errorLine1="            _nickname.value = savedNickname"
         errorLine2="                              ~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/bitchat/android/ui/ChatViewModel.kt"
+            file="src/main/java/com/bitchat/android/ui/MapViewModel.kt"
             line="125"
             column="31"/>
     </issue>

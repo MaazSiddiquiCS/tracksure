@@ -13,11 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.repeatOnLifecycle
@@ -40,8 +38,8 @@ import com.tracksure.android.onboarding.OnboardingCoordinator
 import com.tracksure.android.onboarding.OnboardingState
 import com.tracksure.android.onboarding.PermissionExplanationScreen
 import com.tracksure.android.onboarding.PermissionManager
-import com.tracksure.android.ui.ChatScreen
-import com.tracksure.android.ui.ChatViewModel
+import com.tracksure.android.ui.MapScreen
+import com.tracksure.android.ui.MapViewModel
 import com.tracksure.android.ui.theme.BitchatTheme
 import com.tracksure.android.nostr.PoWPreferenceManager
 import kotlinx.coroutines.delay
@@ -57,11 +55,11 @@ class MainActivity : ComponentActivity() {
     
     // Core mesh service - managed at app level
     private val mainViewModel: MainViewModel by viewModels()
-    private val chatViewModel: ChatViewModel by viewModels { 
+    private val mapViewModel: MapViewModel by viewModels {
         object : ViewModelProvider.Factory {
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
-                return ChatViewModel(application, BluetoothMeshService(application)) as T
+                return MapViewModel(application, BluetoothMeshService(application)) as T
             }
         }
     }
@@ -114,7 +112,7 @@ class MainActivity : ComponentActivity() {
             }
 //            MaterialTheme {
 //                Surface(modifier = Modifier.fillMaxSize()) {
-//                    ChatScreen(viewModel = chatViewModel)
+//                    MapScreen(viewModel = mapViewModel)
 //                }
 //            }
         }
@@ -235,13 +233,13 @@ class MainActivity : ComponentActivity() {
             }
 
             OnboardingState.CHECKING, OnboardingState.INITIALIZING, OnboardingState.COMPLETE -> {
-                // Set up back navigation handling for the chat screen
+                // Set up back navigation handling for the map screen
                 val backCallback = object : OnBackPressedCallback(true) {
                     override fun handleOnBackPressed() {
-                        // Let ChatViewModel handle navigation state
-//                        val handled = chatViewModel.handleBackPressed()
+                        // Let MapViewModel handle navigation state
+//                        val handled = mapViewModel.handleBackPressed()
 //                        if (!handled) {
-//                            // If ChatViewModel doesn't handle it, disable this callback
+//                            // If MapViewModel doesn't handle it, disable this callback
 //                            // and let the system handle it (which will exit the app)
 //                            this.isEnabled = false
 //                            onBackPressedDispatcher.onBackPressed()
@@ -254,14 +252,14 @@ class MainActivity : ComponentActivity() {
                 //onBackPressedDispatcher.addCallback(this, backCallback)
                 onBackPressedDispatcher.addCallback(this, backCallback)
 
-                // Ideally, for CHECKING/INITIALIZING, show a loading screen instead of ChatScreen
+                // Ideally, for CHECKING/INITIALIZING, show a loading screen instead of MapScreen
                 // to prevent initializing ViewModel services before permissions are granted.
                 if (onboardingState == OnboardingState.COMPLETE) {
-                    ChatScreen(viewModel = chatViewModel)
+                    MapScreen(viewModel = mapViewModel)
                 } else {
                     InitializingScreen(modifier)
                 }
-                //ChatScreen(viewModel = chatViewModel)
+                //MapScreen(viewModel = mapViewModel)
             }
             
             OnboardingState.ERROR -> {
@@ -631,7 +629,7 @@ class MainActivity : ComponentActivity() {
                 // This solves the issue where app needs restart to work on first install
                 delay(1000) // Give the system time to process permission grants
                 
-                Log.d("MainActivity", "Permissions verified, initializing chat system")
+                Log.d("MainActivity", "Permissions verified, initializing map system")
                 
                 // Initialize PoW preferences early in the initialization process
                 PoWPreferenceManager.init(this@MainActivity)
@@ -679,7 +677,7 @@ class MainActivity : ComponentActivity() {
         if (mainViewModel.onboardingState.value == OnboardingState.COMPLETE) {
             // Set app foreground state
             //meshService.connectionManager.setAppBackgroundState(false)
-            chatViewModel.setAppBackgroundState(false)
+            mapViewModel.setAppBackgroundState(false)
 
             // Check if Bluetooth was disabled while app was backgrounded
             val currentBluetoothStatus = bluetoothStatusManager.checkBluetoothStatus()
@@ -708,12 +706,12 @@ class MainActivity : ComponentActivity() {
         if (mainViewModel.onboardingState.value == OnboardingState.COMPLETE) {
             // Set app background state
             //meshService.connectionManager.setAppBackgroundState(true)
-           chatViewModel.setAppBackgroundState(true)
+           mapViewModel.setAppBackgroundState(true)
         }
     }
     
     /**
-     * Handle intents from notification clicks - open specific private chat or geohash chat
+     * Handle intents from notification clicks - open specific private map or geohash map
      */
     private fun handleNotificationIntent(intent: Intent) {
         val shouldOpenPrivateChat = intent.getBooleanExtra(
@@ -735,10 +733,10 @@ class MainActivity : ComponentActivity() {
                     Log.d("MainActivity", "Opening private chat with $senderNickname (peerID: $peerID) from notification")
                     
                     // Open the private chat with this peer
-                    //chatViewModel.startPrivateChat(peerID)
+                    //mapViewModel.startPrivateChat(peerID)
                     
                     // Clear notifications for this sender since user is now viewing the chat
-                   // chatViewModel.clearNotificationsForSender(peerID)
+                   // mapViewModel.clearNotificationsForSender(peerID)
                 }
             }
             
@@ -759,13 +757,13 @@ class MainActivity : ComponentActivity() {
                     }
                     val geohashChannel = com.tracksure.android.geohash.GeohashChannel(level, geohash)
                     val channelId = com.tracksure.android.geohash.ChannelID.Location(geohashChannel)
-                   // chatViewModel.selectLocationChannel(channelId)
+                   // mapViewModel.selectLocationChannel(channelId)
                     
                     // Update current geohash state for notifications
-                   // chatViewModel.setCurrentGeohash(geohash)
+                   // mapViewModel.setCurrentGeohash(geohash)
                     
                     // Clear notifications for this geohash since user is now viewing it
-                    //chatViewModel.clearNotificationsForGeohash(geohash)
+                    //mapViewModel.clearNotificationsForGeohash(geohash)
                 }
             }
         }

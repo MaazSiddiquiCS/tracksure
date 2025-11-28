@@ -20,7 +20,7 @@
 //
 //class GeohashViewModel(
 //    application: Application,
-//    private val state: ChatState,
+//    private val state: MapState,
 //    private val messageManager: MessageManager,
 //    private val privateChatManager: PrivateChatManager,
 //    private val meshDelegateHandler: MeshDelegateHandler,

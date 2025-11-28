@@ -103,7 +103,7 @@ private fun BatteryOptimizationEnabledContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "bitchat",
+                    text = "tracksure",
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
@@ -151,7 +151,7 @@ private fun BatteryOptimizationEnabledContent(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "bitchat needs to run in the background to maintain mesh connections. battery optimization can interrupt these connections.",
+                                text = "tracksure needs to run in the background to maintain mesh connections. battery optimization can interrupt these connections.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colorScheme.onBackground.copy(alpha = 0.8f)
                             )
@@ -282,7 +282,7 @@ private fun BatteryOptimizationCheckingContent(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "bitchat",
+                text = "tracksure",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
@@ -320,7 +320,7 @@ private fun BatteryOptimizationCheckingContent(
         )
         
         Text(
-            text = "bitchat can run reliably in the background",
+            text = "tracksure can run reliably in the background",
             style = MaterialTheme.typography.bodyMedium.copy(
                 fontFamily = FontFamily.Monospace,
                 color = colorScheme.onBackground.copy(alpha = 0.8f)
@@ -345,7 +345,7 @@ private fun BatteryOptimizationNotSupportedContent(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "bitchat",
+                text = "tracksure",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
@@ -370,7 +370,7 @@ private fun BatteryOptimizationNotSupportedContent(
         )
         
         Text(
-            text = "your device doesn't require battery optimization settings. bitchat will run normally.",
+            text = "your device doesn't require battery optimization settings. tracksure will run normally.",
             style = MaterialTheme.typography.bodyMedium.copy(
                 fontFamily = FontFamily.Monospace,
                 color = colorScheme.onBackground.copy(alpha = 0.8f)

@@ -10,10 +10,10 @@
 //
 ///**
 // * Handles media file sending operations (voice notes, images, generic files)
-// * Separated from ChatViewModel for better separation of concerns
+// * Separated from MapViewModel for better separation of concerns
 // */
 //class MediaSendingManager(
-//    private val state: ChatState,
+//    private val state: MapState,
 //    private val messageManager: MessageManager,
 //    private val channelManager: ChannelManager,
 //    private val meshService: BluetoothMeshService

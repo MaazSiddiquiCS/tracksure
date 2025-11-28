@@ -45,8 +45,8 @@
 //import com.tracksure.android.ui.media.FilePickerButton
 //
 ///**
-// * Input components for ChatScreen
-// * Extracted from ChatScreen.kt for better organization
+// * Input components for MapScreen
+// * Extracted from MapScreen.kt for better organization
 // */
 //
 ///**

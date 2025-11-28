@@ -24,7 +24,7 @@
 // * Now uses centralized PeerFingerprintManager for all fingerprint operations
 // */
 //class PrivateChatManager(
-//    private val state: ChatState,
+//    private val state: MapState,
 //    private val messageManager: MessageManager,
 //    private val dataManager: DataManager,
 //    private val noiseSessionDelegate: NoiseSessionDelegate

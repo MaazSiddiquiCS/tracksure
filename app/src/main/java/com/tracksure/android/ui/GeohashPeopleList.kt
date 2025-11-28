@@ -37,13 +37,13 @@
 //
 //@Composable
 //fun GeohashPeopleList(
-//    viewModel: ChatViewModel,
+//    viewModel: MapViewModel,
 //    onTapPerson: () -> Unit,
 //    modifier: Modifier = Modifier
 //) {
 //    val colorScheme = MaterialTheme.colorScheme
 //
-//    // Observe geohash people from ChatViewModel
+//    // Observe geohash people from MapViewModel
 //    val geohashPeople by viewModel.geohashPeople.observeAsState(emptyList())
 //    val selectedLocationChannel by viewModel.selectedLocationChannel.observeAsState()
 //    val isTeleported by viewModel.isTeleported.observeAsState(false)
@@ -165,7 +165,7 @@
 //    isMyTeleported: Boolean,
 //    nickname: String,
 //    colorScheme: ColorScheme,
-//    viewModel: ChatViewModel,
+//    viewModel: MapViewModel,
 //    showHashSuffix: Boolean,
 //    onTap: () -> Unit
 //) {

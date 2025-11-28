@@ -47,7 +47,7 @@
 //fun LocationChannelsSheet(
 //    isPresented: Boolean,
 //    onDismiss: () -> Unit,
-//    viewModel: ChatViewModel,
+//    viewModel: MapViewModel,
 //    modifier: Modifier = Modifier
 //) {
 //    val context = LocalContext.current
@@ -695,13 +695,13 @@
 //    }
 //}
 //
-//private fun meshTitleWithCount(viewModel: ChatViewModel): String {
+//private fun meshTitleWithCount(viewModel: MapViewModel): String {
 //    val meshCount = meshCount(viewModel)
 //    val noun = if (meshCount == 1) "person" else "people"
 //    return "mesh [$meshCount $noun]"
 //}
 //
-//private fun meshCount(viewModel: ChatViewModel): Int {
+//private fun meshCount(viewModel: MapViewModel): Int {
 //    val myID = viewModel.meshService.myPeerID
 //    return viewModel.connectedPeers.value?.count { peerID ->
 //        peerID != myID

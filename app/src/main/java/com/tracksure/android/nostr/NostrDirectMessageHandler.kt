@@ -6,7 +6,7 @@
 //import com.tracksure.android.model.DeliveryStatus
 //import com.tracksure.android.protocol.BitchatPacket
 //import com.tracksure.android.services.SeenMessageStore
-//import com.tracksure.android.ui.ChatState
+//import com.tracksure.android.ui.MapState
 //import com.tracksure.android.ui.MeshDelegateHandler
 //import com.tracksure.android.ui.PrivateChatManager
 //import kotlinx.coroutines.CoroutineScope
@@ -17,7 +17,7 @@
 //
 //class NostrDirectMessageHandler(
 //    private val application: Application,
-//    private val state: ChatState,
+//    private val state: MapState,
 //    private val privateChatManager: PrivateChatManager,
 //    private val meshDelegateHandler: MeshDelegateHandler,
 //    private val scope: CoroutineScope,

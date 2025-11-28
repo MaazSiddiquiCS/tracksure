@@ -14,14 +14,13 @@ import com.tracksure.android.model.BitchatMessage
 import com.tracksure.android.model.RoutedPacket
 import com.tracksure.android.protocol.BitchatPacket
 import com.tracksure.android.util.NotificationIntervalManager
-import kotlinx.coroutines.launch
 
-class ChatViewModel(
+class MapViewModel(
     application: Application,
     val meshService: BluetoothMeshService
 ) : AndroidViewModel(application), BluetoothMeshDelegate {
 
-    private val state = ChatState()
+    private val state = MapState()
     private val locationChannelManager = LocationChannelManager.getInstance(application)
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -68,7 +67,7 @@ class ChatViewModel(
 
         // Start Services
         if (!meshService.connectionManager.startServices()) {
-            Log.e("ChatViewModel", "Failed to start Mesh Services")
+            Log.e("MapViewModel", "Failed to start Mesh Services")
         }
 
         // Force location on
@@ -87,7 +86,7 @@ class ChatViewModel(
     // REMOVED: private fun startLocationLoop() {...} -> Delete this function entirely
 
     private fun broadcastMyLocation(loc: Location) {
-        Log.d("ChatViewModel", "📡 Broadcasting my location: ${loc.latitude}, ${loc.longitude}")
+        Log.d("MapViewModel", "📡 Broadcasting my location: ${loc.latitude}, ${loc.longitude}")
         meshService.broadcastLocation(loc.latitude, loc.longitude)
         lastBroadcastTime = System.currentTimeMillis()
     }
@@ -124,12 +123,12 @@ class ChatViewModel(
 
     override fun handleLocationUpdate(routed: RoutedPacket) {
         // Packet arrived -> PeerManager updated -> We refresh UI
-        Log.d("ChatViewModel", "Received Location Update from ${routed.peerID}")
+        Log.d("MapViewModel", "Received Location Update from ${routed.peerID}")
         refreshPeerList()
     }
 
     override fun didUpdatePeerList(peerIDs: List<String>) {
-        Log.d("ChatViewModel", "Peer List Updated: ${peerIDs.size} peers")
+        Log.d("MapViewModel", "Peer List Updated: ${peerIDs.size} peers")
         refreshPeerList()
 
         // If a new peer appears, send them our location immediately
@@ -137,20 +136,20 @@ class ChatViewModel(
     }
 
     override fun onDeviceConnected(device: android.bluetooth.BluetoothDevice) {
-        Log.d("ChatViewModel", "Device Connected: ${device.address}")
+        Log.d("MapViewModel", "Device Connected: ${device.address}")
         state.setIsConnected(true)
         // Trigger refresh to see if PeerManager has processed them yet
         refreshPeerList()
     }
 
     override fun onDeviceDisconnected(device: android.bluetooth.BluetoothDevice) {
-        Log.d("ChatViewModel", "Device Disconnected: ${device.address}")
+        Log.d("MapViewModel", "Device Disconnected: ${device.address}")
         refreshPeerList()
     }
 
     override fun onCleared() {
         super.onCleared()
-        Log.d("ChatViewModel", "🛑 App closing, stopping services...")
+        Log.d("MapViewModel", "🛑 App closing, stopping services...")
 
         // Stop UI Loop - This now works because there is only one runnable
         mainHandler.removeCallbacks(locationRunnable)

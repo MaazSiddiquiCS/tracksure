@@ -3,27 +3,24 @@ package com.tracksure.android.ui
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.tracksure.android.mesh.BluetoothMeshService
-import com.tracksure.android.model.BitchatMessage
 import junit.framework.TestCase.assertEquals
 
 import org.junit.Before
 import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
 import org.mockito.kotlin.mock
 import org.robolectric.RobolectricTestRunner
-import java.util.Date
 
 @RunWith(RobolectricTestRunner::class)
 class CommandProcessorTest() {
   private val context: Context = ApplicationProvider.getApplicationContext()
-  private val chatState = ChatState()
+  private val mapState = MapState()
   private lateinit var commandProcessor: CommandProcessor
 
-  val messageManager: MessageManager = MessageManager(state = chatState)
+  val messageManager: MessageManager = MessageManager(state = mapState)
   val channelManager: ChannelManager = ChannelManager(
-    state = chatState,
+    state = mapState,
     messageManager = messageManager,
     dataManager = DataManager(context = context),
     coroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate)
@@ -34,11 +31,11 @@ class CommandProcessorTest() {
   @Before
   fun setup() {
     commandProcessor = CommandProcessor(
-      state = chatState,
+      state = mapState,
       messageManager = messageManager,
       channelManager = channelManager,
       privateChatManager = PrivateChatManager(
-        state = chatState,
+        state = mapState,
         messageManager = messageManager,
         dataManager = DataManager(context = context),
         noiseSessionDelegate = mock<NoiseSessionDelegate>()

@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
         object : ViewModelProvider.Factory {
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
-                return MapViewModel(application, BluetoothMeshService(application)) as T
+                return MapViewModel(application, BluetoothMeshService.getInstance(application)) as T
             }
         }
     }
@@ -769,20 +769,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    
+
+    // In MainActivity.kt
+
     override fun onDestroy() {
         super.onDestroy()
-        
+
         // Cleanup location status manager
         try {
             locationStatusManager.cleanup()
-            Log.d("MainActivity", "Location status manager cleaned up successfully")
-        } catch (e: Exception) {
-            Log.w("MainActivity", "Error cleaning up location status manager: ${e.message}")
+        } catch (e: Exception) { }
+
+        // Stop the Foreground Service Intent
+        val intent = Intent(this, MeshForegroundService::class.java)
+        stopService(intent)
+
+        // FAILSAFE: Kill the singleton if the activity is being destroyed to free the process
+        if (isFinishing) {
+            BluetoothMeshService.shutdown()
         }
-        
-        // Stop mesh services if app was fully initialized
-                stopServices()
-                Log.d("MainActivity", "Mesh services stopped successfully")
+
+        Log.d("MainActivity", "Activity destroyed, services stopped")
     }
 }

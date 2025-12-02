@@ -1,6 +1,7 @@
 package com.tracksure.android.ui
 
 import android.app.Application
+import android.content.Intent
 import android.location.Location
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
@@ -13,6 +14,7 @@ import com.tracksure.android.mesh.PeerInfo
 import com.tracksure.android.model.BitchatMessage
 import com.tracksure.android.model.RoutedPacket
 import com.tracksure.android.protocol.BitchatPacket
+import com.tracksure.android.services.MeshForegroundService
 import com.tracksure.android.util.NotificationIntervalManager
 
 class MapViewModel(
@@ -117,18 +119,24 @@ class MapViewModel(
     fun setAppBackgroundState(inBackground: Boolean) {
         // Forward to notification manager for notification logic
         notificationManager.setAppBackgroundState(inBackground)
+        meshService.connectionManager.setAppBackgroundState(inBackground = false)
     }
 
     // --- BluetoothMeshDelegate ---
 
     override fun handleLocationUpdate(routed: RoutedPacket) {
-        // Packet arrived -> PeerManager updated -> We refresh UI
-        Log.d("MapViewModel", "Received Location Update from ${routed.peerID}")
-        refreshPeerList()
+        // CRITICAL FIX: DO NOT REFRESH HERE.
+        // This method is called instantly when a packet is processed, but before
+        // PeerManager has finished saving the data. Refreshing here causes the UI
+        // to read old data, leading to the delay you're seeing.
+        Log.d("MapViewModel", "Packet received for ${routed.peerID}. Waiting for PeerManager to confirm update.")
+        // REMOVED: refreshPeerList()
     }
 
     override fun didUpdatePeerList(peerIDs: List<String>) {
-        Log.d("MapViewModel", "Peer List Updated: ${peerIDs.size} peers")
+        // THIS IS THE CORRECT PLACE to refresh the UI.
+        // This method is only called AFTER PeerManager has successfully updated its internal list.
+        Log.d("MapViewModel", "PeerManager confirmed update for ${peerIDs.size} peers. Refreshing UI now.")
         refreshPeerList()
 
         // If a new peer appears, send them our location immediately
@@ -149,18 +157,25 @@ class MapViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        Log.d("MapViewModel", "🛑 App closing, stopping services...")
+        Log.d("MapViewModel", "🛑 App closing, performing hard shutdown...")
 
-        // Stop UI Loop - This now works because there is only one runnable
+        // 1. Stop UI & Location
         mainHandler.removeCallbacks(locationRunnable)
-
-        // Stop Location Updates
         locationChannelManager.endLiveRefresh()
 
-        // Stop Bluetooth/Mesh
-        meshService.connectionManager.stopServices()
-        meshService.peerManager.shutdown()
+        // 2. Stop Android Service
+        try {
+            val intent = Intent(getApplication(), MeshForegroundService::class.java)
+            getApplication<Application>().stopService(intent)
+        } catch (e: Exception) {
+            Log.e("MapViewModel", "Error stopping foreground service", e)
+        }
+
+        // 3. HARD SHUTDOWN: Destroy the Singleton instance
+        BluetoothMeshService.shutdown()
     }
+
+
 
     // ... Stubs remain the same ...
     override fun onPacketReceived(packet: BitchatPacket, peerID: String, device: android.bluetooth.BluetoothDevice?) {}

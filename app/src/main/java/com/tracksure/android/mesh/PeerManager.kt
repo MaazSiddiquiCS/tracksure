@@ -173,21 +173,21 @@ class PeerManager {
 
         if (existing != null) {
             // Update existing peer
+            // CRITICAL: This updates 'lastSeen', which prevents the cleanup logic from deleting it
             peers[peerID] = existing.copy(
                 latitude = lat,
                 longitude = lng,
-                lastSeen = now
+                lastSeen = now,
+                isConnected = true // Force connected status on update
             )
-        }
-        else {
-            // CREATE NEW PEER if they sent location but haven't announced yet
-            // We generate a temporary nickname from their ID
+        } else {
+            // CREATE NEW PEER
             val shortId = peerID.take(4)
             val newPeer = PeerInfo(
                 id = peerID,
-                nickname = "Peer $shortId", // Placeholder until Announce arrives
+                nickname = "Peer $shortId",
                 isConnected = true,
-                isDirectConnection = true, // Assume direct if we got a packet
+                isDirectConnection = true,
                 noisePublicKey = null,
                 signingPublicKey = null,
                 isVerifiedNickname = false,
@@ -198,9 +198,13 @@ class PeerManager {
             peers[peerID] = newPeer
             Log.d(TAG, "🆕 Created new peer from location data: Peer $shortId at $lat, $lng")
         }
-            // Trigger UI update
-            notifyPeerListUpdate()
+
+        // CRITICAL FIX:
+        // Always notify the UI. Your previous code might have had this inside an 'else' block or
+        // failed to trigger if the peer was just "updated" vs "created".
+        notifyPeerListUpdate()
     }
+
     /**
      * Set whether a peer is directly connected over Bluetooth.
      * Triggers a peer list update to refresh UI badges.
@@ -217,6 +221,13 @@ class PeerManager {
                 } catch (_: Exception) { }
             }
         }
+    }
+    fun shutdown() {
+        peers.clear()
+        peerRSSI.clear()
+        announcedPeers.clear()
+        announcedToPeers.clear()
+        managerScope.cancel() // Cancel internal coroutines
     }
 
     // MARK: - Legacy Methods (maintained for compatibility)
@@ -567,10 +578,6 @@ class PeerManager {
     /**
      * Shutdown the manager
      */
-    fun shutdown() {
-        managerScope.cancel()
-        clearAllPeers()
-    }
 }
 
 /**

@@ -33,6 +33,18 @@ class BluetoothMeshService(private val context: Context) {
     private val debugManager by lazy { try { com.tracksure.android.ui.debug.DebugSettingsManager.getInstance() } catch (e: Exception) { null } }
     
     companion object {
+        @Volatile
+        private var INSTANCE: BluetoothMeshService? = null
+
+        fun getInstance(context: Context): BluetoothMeshService {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: BluetoothMeshService(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+        fun shutdown() {
+            INSTANCE?.shutdownInternal()
+            INSTANCE = null
+        }
         private const val TAG = "BluetoothMeshService"
         private const val MAX_TTL: UByte = 7u
     }
@@ -108,7 +120,17 @@ class BluetoothMeshService(private val context: Context) {
     fun handleIncomingPacket(routedPacket: RoutedPacket){
         packetProcessor.processPacket(routedPacket)
     }
-
+    private fun shutdownInternal() {
+        try {
+            isActive = false
+            connectionManager.stopServices()
+            peerManager.shutdown() // Ensure PeerManager has a shutdown/clear method
+            packetProcessor.shutdown()
+            serviceScope.cancel() // Kill the main service scope
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during hard shutdown: ${e.message}")
+        }
+    }
     /**
      * Start periodic debug logging every 10 seconds
      */
@@ -503,7 +525,7 @@ class BluetoothMeshService(private val context: Context) {
                         // Store in PeerManager
                         peerManager.updatePeerLocation(peerID, lat, lng)
                         Log.d(TAG, "Stored location for $peerID: $lat, $lng")
-                        delegate?.handleLocationUpdate(routed)
+                        //delegate?.handleLocationUpdate(routed)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to parse location: $payloadStr", e)

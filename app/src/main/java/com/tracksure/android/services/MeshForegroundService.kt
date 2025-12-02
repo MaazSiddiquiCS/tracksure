@@ -12,47 +12,83 @@ import androidx.core.app.NotificationCompat
 import com.tracksure.android.R
 import com.tracksure.android.mesh.BluetoothMeshService
 
-class MeshForegroundService : Service()
-{
+class MeshForegroundService : Service() {
     private lateinit var meshService: BluetoothMeshService
 
-    companion object{
-        private const val NOTIFICATION_ID=101
+    companion object {
+        private const val NOTIFICATION_ID = 101
         private const val NOTIFICATION_CHANNEL_ID = "MeshNetworkServiceChannel"
         private const val TAG = "MeshForegroundService"
     }
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "ForegrounServiceisbeingCreated...")
-        meshService = BluetoothMeshService(applicationContext)
+        Log.d(TAG, "ForegroundService is being Created...")
+        meshService = BluetoothMeshService.getInstance(applicationContext)
     }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "ForegroundServiceisbeingStarted...")
+        Log.d(TAG, "ForegroundService is being Started...")
         createNotificationChannel()
-        val notification : Notification= NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+
+        // Ensure notification icon exists or use a system default to prevent crash
+        val icon = if (R.drawable.ic_launcher_foreground != 0) R.drawable.ic_launcher_foreground else android.R.drawable.ic_dialog_info
+
+        val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Mesh Network Service")
             .setContentText("Running in the background")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(icon)
             .build()
 
         startForeground(NOTIFICATION_ID, notification)
-        meshService.startServices()
-        return START_STICKY
+
+        // FIX: Call startServices on connectionManager, not meshService directly
+        if (::meshService.isInitialized) {
+            meshService.connectionManager.startServices()
+        }
+
+        return START_NOT_STICKY
+    }
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.d(TAG, "App task removed (swiped away), stopping service")
+
+        // Stop internal logic
+        try {
+            if (::meshService.isInitialized) {
+                meshService.connectionManager.stopServices()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping mesh on task removed: ${e.message}")
+        }
+
+        // Stop the service and remove notification immediately
+        stopForeground(true)
+        stopSelf()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "Foreground service is being destroyed")
-        meshService.stopServices()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        try {
+            meshService.connectionManager.stopServices()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping services: ${e.message}")
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
 
-    private fun createNotificationChannel(){
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 "Mesh Network Status",
@@ -61,6 +97,5 @@ class MeshForegroundService : Service()
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
         }
-
     }
 }

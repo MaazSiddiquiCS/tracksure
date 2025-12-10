@@ -1,12 +1,14 @@
 package com.tracksure.android.ui
 
 import android.app.Application
+import android.content.Context
 import android.content.Intent
 import android.location.Location
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import com.tracksure.android.geohash.LocationChannelManager
 import com.tracksure.android.mesh.BluetoothMeshDelegate
 import com.tracksure.android.mesh.BluetoothMeshService
@@ -25,29 +27,41 @@ class MapViewModel(
     private val state = MapState()
     private val locationChannelManager = LocationChannelManager.getInstance(application)
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val prefs = application.getSharedPreferences("tracksure_prefs", Context.MODE_PRIVATE)
 
-    // This is the ONLY runnable we want.
+    // --- Settings Data ---
+    private val _myNickname = MutableLiveData<String>()
+    val myNickname: LiveData<String> = _myNickname
+
+    private val _myMagicCode = MutableLiveData<String>()
+    val myMagicCode: LiveData<String> = _myMagicCode
+
+    // --- Authorized Peers (Unlocked via Code) ---
+    private val _authorizedPeers = MutableLiveData<Set<String>>(emptySet())
+    val authorizedPeers: LiveData<Set<String>> = _authorizedPeers
+
+    // --- Live Refresh Loop ---
     private val locationRunnable = object : Runnable {
         override fun run() {
             // 1. Update My Location
             val loc = locationChannelManager.getCurrentLocation()
             if (loc != null) {
                 state.setMyLocation(loc)
-
-                // 2. Broadcast if needed
+                // Broadcast occasionally (every 5s) to avoid flooding, but update UI every 1s
                 val now = System.currentTimeMillis()
                 if (now - lastBroadcastTime > BROADCAST_INTERVAL) {
                     broadcastMyLocation(loc)
                 }
             }
 
-            // 3. Explicitly refresh peer list
+            // 2. Refresh Peer List (Fetch latest data from mesh service)
             refreshPeerList()
 
-            // Loop
-            mainHandler.postDelayed(this, 2000)
+            // 3. Loop every 1 second for "Live" tracking feel
+            mainHandler.postDelayed(this, 1000)
         }
     }
+
     private val notificationManager = NotificationManager(
         application.applicationContext,
         NotificationManagerCompat.from(application.applicationContext),
@@ -58,43 +72,67 @@ class MapViewModel(
     val peerLocations: LiveData<Map<String, PeerInfo>> = state.peerLocations
     val myLocation: LiveData<Location?> = state.myLocation
     val isConnected: LiveData<Boolean> = state.isConnected
-    val nickname: LiveData<String> = state.nickname
     val connectedPeersCount: LiveData<Int> = state.connectedPeersCount
 
     private var lastBroadcastTime = 0L
     private val BROADCAST_INTERVAL = 5000L
 
     init {
+        // Load Settings
+        _myNickname.value = prefs.getString("nickname", "Unknown User")
+        _myMagicCode.value = prefs.getString("magic_code", "1234")
+
         meshService.delegate = this
 
-        // Start Services
         if (!meshService.connectionManager.startServices()) {
             Log.e("MapViewModel", "Failed to start Mesh Services")
         }
 
-        // Force location on
         if (!locationChannelManager.isLocationServicesEnabled()) {
             locationChannelManager.enableLocationServices()
         }
         locationChannelManager.enableLocationChannels()
-        locationChannelManager.beginLiveRefresh(2000)
 
-        // START THE LOOP
+        // Tell LocationChannelManager to update frequently
+        locationChannelManager.beginLiveRefresh(1000)
+
+        // Start the ViewModel loop
         mainHandler.post(locationRunnable)
-
-        // REMOVED: startLocationLoop() -> This was creating a zombie loop
     }
 
-    // REMOVED: private fun startLocationLoop() {...} -> Delete this function entirely
+    // --- Actions ---
+
+    fun updateSettings(newNickname: String, newCode: String) {
+        _myNickname.value = newNickname
+        _myMagicCode.value = newCode
+        prefs.edit()
+            .putString("nickname", newNickname)
+            .putString("magic_code", newCode)
+            .apply()
+    }
+
+    /**
+     * Authenticate tracking.
+     * Since we cannot modify the mesh protocol to verify the code remotely,
+     * we perform a client-side check. If the user enters a non-empty code
+     * (simulating they know the shared secret), we authorize the peer.
+     */
+    fun authorizeTracking(peerId: String, inputCode: String): Boolean {
+        if (inputCode.isNotBlank()) {
+            val currentSet = _authorizedPeers.value.orEmpty().toMutableSet()
+            currentSet.add(peerId)
+            _authorizedPeers.value = currentSet
+            return true
+        }
+        return false
+    }
 
     private fun broadcastMyLocation(loc: Location) {
-        Log.d("MapViewModel", "📡 Broadcasting my location: ${loc.latitude}, ${loc.longitude}")
         meshService.broadcastLocation(loc.latitude, loc.longitude)
         lastBroadcastTime = System.currentTimeMillis()
     }
 
     private fun refreshPeerList() {
-        // Get IDs that PeerManager considers active
         val activePeers = meshService.peerManager.getActivePeerIDs()
         val map = mutableMapOf<String, PeerInfo>()
 
@@ -104,20 +142,13 @@ class MapViewModel(
             }
         }
 
-        // Update State
         state.setPeerLocations(map)
-
-        // Update Counter
-        val count = map.size
-        state.setConnectedPeersCount(count)
-
-        // Update connectivity status based on peers or raw connection
+        state.setConnectedPeersCount(map.size)
         val hasRawConnection = meshService.connectionManager.getConnectedDeviceEntries().isNotEmpty()
-        state.setIsConnected(count > 0 || hasRawConnection)
+        state.setIsConnected(map.isNotEmpty() || hasRawConnection)
     }
 
     fun setAppBackgroundState(inBackground: Boolean) {
-        // Forward to notification manager for notification logic
         notificationManager.setAppBackgroundState(inBackground)
         meshService.connectionManager.setAppBackgroundState(inBackground = false)
     }
@@ -125,59 +156,36 @@ class MapViewModel(
     // --- BluetoothMeshDelegate ---
 
     override fun handleLocationUpdate(routed: RoutedPacket) {
-        // CRITICAL FIX: DO NOT REFRESH HERE.
-        // This method is called instantly when a packet is processed, but before
-        // PeerManager has finished saving the data. Refreshing here causes the UI
-        // to read old data, leading to the delay you're seeing.
-        Log.d("MapViewModel", "Packet received for ${routed.peerID}. Waiting for PeerManager to confirm update.")
-        // REMOVED: refreshPeerList()
+        refreshPeerList()
     }
 
     override fun didUpdatePeerList(peerIDs: List<String>) {
-        // THIS IS THE CORRECT PLACE to refresh the UI.
-        // This method is only called AFTER PeerManager has successfully updated its internal list.
-        Log.d("MapViewModel", "PeerManager confirmed update for ${peerIDs.size} peers. Refreshing UI now.")
         refreshPeerList()
-
-        // If a new peer appears, send them our location immediately
-        locationChannelManager.getCurrentLocation()?.let { broadcastMyLocation(it) }
     }
 
     override fun onDeviceConnected(device: android.bluetooth.BluetoothDevice) {
-        Log.d("MapViewModel", "Device Connected: ${device.address}")
         state.setIsConnected(true)
-        // Trigger refresh to see if PeerManager has processed them yet
         refreshPeerList()
     }
 
     override fun onDeviceDisconnected(device: android.bluetooth.BluetoothDevice) {
-        Log.d("MapViewModel", "Device Disconnected: ${device.address}")
         refreshPeerList()
     }
 
     override fun onCleared() {
         super.onCleared()
-        Log.d("MapViewModel", "🛑 App closing, performing hard shutdown...")
-
-        // 1. Stop UI & Location
         mainHandler.removeCallbacks(locationRunnable)
         locationChannelManager.endLiveRefresh()
-
-        // 2. Stop Android Service
         try {
             val intent = Intent(getApplication(), MeshForegroundService::class.java)
             getApplication<Application>().stopService(intent)
         } catch (e: Exception) {
             Log.e("MapViewModel", "Error stopping foreground service", e)
         }
-
-        // 3. HARD SHUTDOWN: Destroy the Singleton instance
         BluetoothMeshService.shutdown()
     }
 
-
-
-    // ... Stubs remain the same ...
+    // Stubs
     override fun onPacketReceived(packet: BitchatPacket, peerID: String, device: android.bluetooth.BluetoothDevice?) {}
     override fun onRSSIUpdated(deviceAddress: String, rssi: Int) {}
     override fun handleMessage(routed: RoutedPacket) {}

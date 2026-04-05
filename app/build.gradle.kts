@@ -105,6 +105,10 @@ dependencies {
     // Google Play Services Location
     implementation(libs.gms.location)
 
+    // QR generation and camera scanner
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+
     // Security preferences
     implementation(libs.androidx.security.crypto)
     

@@ -10,6 +10,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.tracksure.android.R
+import com.tracksure.android.bridgeupload.BridgeUploadRuntime
 import com.tracksure.android.mesh.BluetoothMeshService
 
 class MeshForegroundService : Service() {
@@ -47,6 +48,9 @@ class MeshForegroundService : Service() {
             meshService.connectionManager.startServices()
         }
 
+        // Start bridge sidecar runtime when mesh foreground service starts.
+        BridgeUploadRuntime.start(applicationContext)
+
         return START_NOT_STICKY
     }
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -63,6 +67,7 @@ class MeshForegroundService : Service() {
         }
 
         // Stop the service and remove notification immediately
+        BridgeUploadRuntime.stop()
         stopForeground(true)
         stopSelf()
     }
@@ -81,6 +86,7 @@ class MeshForegroundService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping services: ${e.message}")
         }
+        BridgeUploadRuntime.stop()
     }
 
     override fun onBind(intent: Intent?): IBinder? {

@@ -24,7 +24,7 @@ class MeshLocationSnapshotAdapter(private val context: Context) {
 
     fun captureSnapshots(nowEpochMs: Long = System.currentTimeMillis()): List<MeshLocationSnapshot> {
         val mesh = BluetoothMeshService.getInstance(context)
-        val peerIds = mesh.getPeerNicknames().keys
+        val peerIds = (mesh.getPeerNicknames().keys + mesh.myPeerID).toSet()
         val snapshots = toSnapshots(peerIds, nowEpochMs) { peerId -> mesh.getPeerInfo(peerId) }
         Log.d(TAG, "Snapshot capture peerIds=${peerIds.size} validSnapshots=${snapshots.size}")
         return snapshots

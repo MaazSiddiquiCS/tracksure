@@ -4,8 +4,9 @@ package com.tracksure.android.bridgeupload.storage
  * Persisted queue record for a location point pending backend upload.
  */
 data class QueuedPoint(
-    val subjectDeviceId: Long,
+    val subjectPeerId: String? = null,
     val uploaderDeviceId: Long,
+    val pendingBatchUuid: String? = null,
     val clientPointId: String,
     val lat: Double,
     val lon: Double,
@@ -21,8 +22,9 @@ data class QueuedPoint(
  * Public input model for programmatic enqueue operations.
  */
 data class QueuedPointInput(
-    val subjectDeviceId: Long,
+    val subjectPeerId: String,
     val uploaderDeviceId: Long,
+    val pendingBatchUuid: String? = null,
     val clientPointId: String,
     val lat: Double,
     val lon: Double,

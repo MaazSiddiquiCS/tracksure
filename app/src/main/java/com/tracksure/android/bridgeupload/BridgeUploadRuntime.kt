@@ -3,8 +3,7 @@ package com.tracksure.android.bridgeupload
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.tracksure.android.identity.BackendDeviceIdentityStore
 
 /**
  * App-level runtime bootstrap for bridge upload sidecar.
@@ -16,11 +15,15 @@ object BridgeUploadRuntime {
     private const val META_UPLOADER_ID = "com.tracksure.android.bridgeupload.UPLOADER_DEVICE_ID"
     private const val META_REQUIRE_WIFI = "com.tracksure.android.bridgeupload.REQUIRE_WIFI"
     private const val META_REQUIRE_VALIDATED = "com.tracksure.android.bridgeupload.REQUIRE_VALIDATED"
-    private const val META_PEER_MAP_JSON = "com.tracksure.android.bridgeupload.PEER_ID_MAP_JSON"
-    private const val META_AUTO_ASSIGN = "com.tracksure.android.bridgeupload.AUTO_ASSIGN_MISSING_PEERS"
 
     @Volatile
     private var scheduler: BridgeUploadScheduler? = null
+
+    @Synchronized
+    fun restartWithLatestIdentity(context: Context) {
+        stop()
+        start(context)
+    }
 
     @Synchronized
     fun start(context: Context) {
@@ -47,8 +50,9 @@ object BridgeUploadRuntime {
             return
         }
 
+        val persistedIdentity = BackendDeviceIdentityStore(appContext).load()
         val uploaderRaw = readStringMeta(appContext, meta, META_UPLOADER_ID).orEmpty().trim()
-        val uploaderDeviceId = readLongMeta(appContext, meta, META_UPLOADER_ID)
+        val uploaderDeviceId = persistedIdentity?.backendDeviceId ?: readLongMeta(appContext, meta, META_UPLOADER_ID)
         if (uploaderDeviceId == null) {
             Log.w(TAG, "Bridge runtime disabled: invalid/missing $META_UPLOADER_ID='$uploaderRaw'")
             return
@@ -58,19 +62,15 @@ object BridgeUploadRuntime {
             endpointUrl = endpointUrl,
             uploaderDeviceId = uploaderDeviceId,
             requireWifiTransport = meta.getBoolean(META_REQUIRE_WIFI, true),
-            requireValidatedNetwork = meta.getBoolean(META_REQUIRE_VALIDATED, true),
-            autoAssignMissingPeerToUploader = meta.getBoolean(META_AUTO_ASSIGN, true)
+            requireValidatedNetwork = meta.getBoolean(META_REQUIRE_VALIDATED, true)
         )
-
-        bootstrapPeerMappings(appContext, config, meta)
 
         val orchestrator = BridgeUploadFactory.create(appContext, config)
         scheduler = BridgeUploadScheduler(orchestrator, config).also { it.start() }
         Log.i(
             TAG,
             "Bridge runtime started endpoint=$endpointUrl uploaderDeviceId=$uploaderDeviceId " +
-                "requireWifi=${config.requireWifiTransport} requireValidated=${config.requireValidatedNetwork} " +
-                "autoAssignMissingPeers=${config.autoAssignMissingPeerToUploader}"
+                "requireWifi=${config.requireWifiTransport} requireValidated=${config.requireValidatedNetwork}"
         )
     }
 
@@ -122,31 +122,6 @@ object BridgeUploadRuntime {
             is String -> raw.trim().toLongOrNull()
             else -> raw.toString().trim().toLongOrNull()
         }
-    }
-
-    private fun bootstrapPeerMappings(context: Context, config: BridgeUploadConfig, meta: android.os.Bundle) {
-        val rawMapJson = readStringMeta(context, meta, META_PEER_MAP_JSON).orEmpty().trim()
-        if (rawMapJson.isBlank() || rawMapJson == "{}") {
-            Log.d(TAG, "No default peer mapping metadata provided")
-            return
-        }
-
-        val defaults = try {
-            val mapType = object : TypeToken<Map<String, Long>>() {}.type
-            Gson().fromJson<Map<String, Long>>(rawMapJson, mapType).orEmpty()
-        } catch (e: Exception) {
-            Log.w(TAG, "Invalid $META_PEER_MAP_JSON metadata: ${e.message}")
-            emptyMap()
-        }
-
-        if (defaults.isEmpty()) {
-            Log.d(TAG, "Default peer mapping metadata parsed to empty map")
-            return
-        }
-
-        val resolver = BridgeUploadFactory.createDeviceIdResolver(context, config)
-        val inserted = resolver.seedDefaultsIfMissing(defaults)
-        Log.i(TAG, "Default peer mapping bootstrap done defaults=${defaults.size} inserted=$inserted")
     }
 }
 

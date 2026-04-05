@@ -1,7 +1,6 @@
 package com.tracksure.android.bridgeupload
 
 import android.util.Log
-import com.tracksure.android.bridgeupload.integration.DeviceIdResolver
 import com.tracksure.android.bridgeupload.integration.MeshLocationSnapshotAdapter
 import com.tracksure.android.bridgeupload.model.FlushReport
 import com.tracksure.android.bridgeupload.model.LocationBatchUploadRequest
@@ -24,11 +23,13 @@ import java.util.UUID
 class BridgeUploadOrchestrator(
     private val config: BridgeUploadConfig,
     private val snapshotAdapter: MeshLocationSnapshotAdapter,
-    private val deviceIdResolver: DeviceIdResolver,
     private val queueStore: LocationUploadQueueStore,
     private val connectivityGate: ConnectivityGate,
     private val apiClient: LocationBatchApiClient
 ) {
+    @Volatile
+    private var lastUploadAttemptAtEpochMs: Long = 0L
+
     data class CaptureReport(
         val captured: Int,
         val enqueued: Int,
@@ -37,7 +38,7 @@ class BridgeUploadOrchestrator(
     )
 
     suspend fun enqueuePoint(
-        subjectDeviceId: Long,
+        subjectPeerId: String,
         uploaderDeviceId: Long,
         clientPointId: String,
         lat: Double,
@@ -49,7 +50,7 @@ class BridgeUploadOrchestrator(
         enqueuePoints(
             listOf(
                 QueuedPointInput(
-                    subjectDeviceId = subjectDeviceId,
+                    subjectPeerId = normalizePeerId(subjectPeerId),
                     uploaderDeviceId = uploaderDeviceId,
                     clientPointId = clientPointId,
                     lat = lat,
@@ -70,7 +71,7 @@ class BridgeUploadOrchestrator(
         }
         val queued = valid.map {
             QueuedPoint(
-                subjectDeviceId = it.subjectDeviceId,
+                subjectPeerId = normalizePeerId(it.subjectPeerId),
                 uploaderDeviceId = it.uploaderDeviceId,
                 clientPointId = it.clientPointId,
                 lat = it.lat,
@@ -89,7 +90,6 @@ class BridgeUploadOrchestrator(
 
     suspend fun captureSnapshotAndEnqueue(): CaptureReport = withContext(Dispatchers.IO) {
         val snapshots = snapshotAdapter.captureSnapshots()
-        var skippedMissingMapping = 0
         var skippedInvalid = 0
 
         val now = System.currentTimeMillis()
@@ -101,17 +101,14 @@ class BridgeUploadOrchestrator(
                 Log.w(TAG, "Skipping invalid coordinates peerId=${snap.peerId} lat=${snap.lat} lon=${snap.lon}")
                 return@forEach
             }
-            val subject = deviceIdResolver.resolveOrAssign(
-                peerId = snap.peerId,
-                fallbackSubjectDeviceId = if (config.autoAssignMissingPeerToUploader) config.uploaderDeviceId else null
-            )
-            if (subject == null) {
-                skippedMissingMapping++
-                Log.i(TAG, "Skipping peer with no mapping peerId=${snap.peerId}")
+            val subjectPeerId = normalizePeerId(snap.peerId)
+            if (subjectPeerId.isBlank()) {
+                skippedInvalid++
+                Log.w(TAG, "Skipping blank peerId snapshot")
                 return@forEach
             }
             toQueue += QueuedPoint(
-                subjectDeviceId = subject,
+                subjectPeerId = subjectPeerId,
                 uploaderDeviceId = config.uploaderDeviceId,
                 clientPointId = UUID.randomUUID().toString(),
                 lat = snap.lat,
@@ -129,13 +126,13 @@ class BridgeUploadOrchestrator(
         Log.d(
             TAG,
             "captureSnapshotAndEnqueue captured=${snapshots.size} enqueued=${toQueue.size} " +
-                "skippedMapping=$skippedMissingMapping skippedInvalid=$skippedInvalid"
+                "skippedInvalid=$skippedInvalid"
         )
 
         CaptureReport(
             captured = snapshots.size,
             enqueued = toQueue.size,
-            skippedMissingMapping = skippedMissingMapping,
+            skippedMissingMapping = 0,
             skippedInvalid = skippedInvalid
         )
     }
@@ -160,7 +157,8 @@ class BridgeUploadOrchestrator(
             )
         }
 
-        val ready = queueStore.peekBatch(maxBatchSize)
+        val nowEpochMs = System.currentTimeMillis()
+        val ready = queueStore.peekBatch(maxBatchSize, nowEpochMs)
         if (ready.isEmpty()) {
             Log.d(TAG, "flushNow no ready points")
             return@withContext FlushReport(
@@ -176,9 +174,63 @@ class BridgeUploadOrchestrator(
             )
         }
 
-        val valid = ready.filter { isValidLatLon(it.lat, it.lon) }
+        val oldestQueuedAt = ready.minOf { it.queuedAtEpochMs }
+        val oldestBatchAgeMs = nowEpochMs - oldestQueuedAt
+        val enoughPoints = ready.size >= config.minPointsToUpload
+        val maxAgeReached = oldestBatchAgeMs >= config.maxBatchAgeMs
+        val minIntervalReached =
+            lastUploadAttemptAtEpochMs == 0L ||
+                (nowEpochMs - lastUploadAttemptAtEpochMs) >= config.minUploadIntervalMs
+
+        if (!enoughPoints && !maxAgeReached) {
+            Log.d(
+                TAG,
+                "flushNow deferred reason=not_enough_points ready=${ready.size} min=${config.minPointsToUpload} oldestAgeMs=$oldestBatchAgeMs"
+            )
+            return@withContext FlushReport(
+                queuedBefore = queuedBefore,
+                attempted = 0,
+                uploaded = 0,
+                failedRetryable = 0,
+                failedFatal = 0,
+                skippedInvalid = captureReport.skippedInvalid,
+                skippedMissingMapping = captureReport.skippedMissingMapping,
+                remaining = queueStore.size(),
+                networkEligible = true
+            )
+        }
+
+        if (!minIntervalReached && !maxAgeReached) {
+            Log.d(
+                TAG,
+                "flushNow deferred reason=min_interval now=$nowEpochMs last=$lastUploadAttemptAtEpochMs minIntervalMs=${config.minUploadIntervalMs}"
+            )
+            return@withContext FlushReport(
+                queuedBefore = queuedBefore,
+                attempted = 0,
+                uploaded = 0,
+                failedRetryable = 0,
+                failedFatal = 0,
+                skippedInvalid = captureReport.skippedInvalid,
+                skippedMissingMapping = captureReport.skippedMissingMapping,
+                remaining = queueStore.size(),
+                networkEligible = true
+            )
+        }
+
+        lastUploadAttemptAtEpochMs = nowEpochMs
+
+        val valid = ready.filter {
+            isValidLatLon(it.lat, it.lon) && !normalizePeerId(it.subjectPeerId).isBlank()
+        }
         val skippedInvalid = captureReport.skippedInvalid + (ready.size - valid.size)
-        val grouped = valid.groupBy { it.subjectDeviceId to it.uploaderDeviceId }
+        val grouped = valid.groupBy {
+            UploadGroupKey(
+                subjectPeerId = normalizePeerId(it.subjectPeerId),
+                uploaderDeviceId = it.uploaderDeviceId,
+                pendingBatchUuid = it.pendingBatchUuid
+            )
+        }
         Log.d(TAG, "flushNow ready=${ready.size} valid=${valid.size} groups=${grouped.size}")
 
         val uploadedIds = mutableSetOf<String>()
@@ -187,13 +239,15 @@ class BridgeUploadOrchestrator(
         var failedFatal = 0
 
         grouped.forEach { (key, points) ->
+            val batchUuid = key.pendingBatchUuid ?: UUID.randomUUID().toString()
             Log.d(
                 TAG,
-                "Uploading group subject=${key.first} uploader=${key.second} points=${points.size}"
+                "Uploading group subjectPeerId=${key.subjectPeerId} uploader=${key.uploaderDeviceId} points=${points.size} batchUuid=$batchUuid"
             )
             val request = LocationBatchUploadRequest(
-                subjectDeviceId = key.first,
-                uploaderDeviceId = key.second,
+                clientBatchUuid = batchUuid,
+                subjectPeerId = key.subjectPeerId,
+                uploaderDeviceId = key.uploaderDeviceId,
                 points = points.map {
                     LocationPointDto(
                         clientPointId = it.clientPointId,
@@ -213,12 +267,12 @@ class BridgeUploadOrchestrator(
                 }
                 is LocationBatchApiClient.UploadResult.RetryableError -> {
                     failedRetryable += points.size
-                    retryUpdates += points.map { nextRetry(it) }
+                    retryUpdates += points.map { nextRetry(it, batchUuid) }
                     Log.w(TAG, "flush retryable error code=${result.code} msg=${result.message}")
                 }
                 is LocationBatchApiClient.UploadResult.FatalError -> {
                     failedFatal += points.size
-                    retryUpdates += points.map { nextRetry(it, fatal = true) }
+                    retryUpdates += points.map { nextRetry(it, batchUuid, fatal = true) }
                     Log.w(TAG, "flush fatal error code=${result.code} msg=${result.message}")
                 }
             }
@@ -249,14 +303,15 @@ class BridgeUploadOrchestrator(
     }
 
     internal fun nextBackoffMs(attemptCount: Int): Long {
-        return BackoffPolicy.nextDelayMs(attemptCount, config.maxBackoffMs)
+        return BackoffPolicy.nextDelayMs(attemptCount, config.maxBackoffMs, config.backoffJitterRatio)
     }
 
-    private fun nextRetry(point: QueuedPoint, fatal: Boolean = false): QueuedPoint {
+    private fun nextRetry(point: QueuedPoint, batchUuid: String, fatal: Boolean = false): QueuedPoint {
         val nextAttempt = point.attemptCount + 1
         val baseDelay = nextBackoffMs(nextAttempt)
         val delayMs = if (fatal) (baseDelay * 2).coerceAtMost(config.maxBackoffMs) else baseDelay
         return point.copy(
+            pendingBatchUuid = batchUuid,
             attemptCount = nextAttempt,
             nextAttemptAtEpochMs = System.currentTimeMillis() + delayMs
         )
@@ -270,10 +325,20 @@ class BridgeUploadOrchestrator(
         return lat in -90.0..90.0 && lon in -180.0..180.0
     }
 
+    private fun normalizePeerId(peerId: String?): String {
+        return peerId?.trim()?.lowercase().orEmpty()
+    }
+
     companion object {
         private const val TAG = "BridgeUpload"
         private val ISO_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
     }
+
+    private data class UploadGroupKey(
+        val subjectPeerId: String,
+        val uploaderDeviceId: Long,
+        val pendingBatchUuid: String?
+    )
 }
 
 

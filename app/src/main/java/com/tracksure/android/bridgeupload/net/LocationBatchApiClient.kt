@@ -14,6 +14,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
  */
 class LocationBatchApiClient(
     private val endpointUrl: String,
+    private val accessTokenProvider: () -> String?,
     private val gson: Gson = Gson()
 ) {
     companion object {
@@ -28,13 +29,20 @@ class LocationBatchApiClient(
 
     fun uploadBatch(requestPayload: LocationBatchUploadRequest): UploadResult {
         return try {
+            val accessToken = accessTokenProvider()?.trim().orEmpty()
+            if (accessToken.isBlank()) {
+                Log.w(TAG, "Upload blocked: missing access token")
+                return UploadResult.RetryableError(401, "Authentication required. Please sign in.")
+            }
+
             Log.d(
                 TAG,
-                "POST $endpointUrl subject=${requestPayload.subjectDeviceId} uploader=${requestPayload.uploaderDeviceId} points=${requestPayload.points.size}"
+                "POST $endpointUrl subjectPeerId=${requestPayload.subjectPeerId} uploader=${requestPayload.uploaderDeviceId} points=${requestPayload.points.size}"
             )
             val requestJson = gson.toJson(requestPayload)
             val request = Request.Builder()
                 .url(endpointUrl)
+                .header("Authorization", "Bearer $accessToken")
                 .post(requestJson.toRequestBody("application/json".toMediaType()))
                 .build()
 

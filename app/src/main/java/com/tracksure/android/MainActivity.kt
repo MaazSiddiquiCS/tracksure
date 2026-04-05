@@ -20,7 +20,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.Lifecycle
+import com.tracksure.android.identity.AuthSessionManager
+import com.tracksure.android.identity.AuthTokenStore
+import com.tracksure.android.identity.BackendDeviceIdentityStore
+import com.tracksure.android.identity.DeviceLinkManager
 import com.tracksure.android.mesh.BluetoothMeshService
+import com.tracksure.android.net.AuthApiClient
+import com.tracksure.android.net.DeviceLinkApiClient
 import com.tracksure.android.services.MeshForegroundService
 import com.tracksure.android.onboarding.BluetoothCheckScreen
 import com.tracksure.android.onboarding.BluetoothStatus
@@ -40,6 +46,8 @@ import com.tracksure.android.onboarding.PermissionExplanationScreen
 import com.tracksure.android.onboarding.PermissionManager
 import com.tracksure.android.ui.MapScreen
 import com.tracksure.android.ui.MapViewModel
+import com.tracksure.android.ui.auth.AuthGateScreen
+import com.tracksure.android.ui.auth.AuthViewModel
 import com.tracksure.android.ui.theme.BitchatTheme
 import com.tracksure.android.nostr.PoWPreferenceManager
 import kotlinx.coroutines.delay
@@ -60,6 +68,25 @@ class MainActivity : ComponentActivity() {
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
                 return MapViewModel(application, BluetoothMeshService.getInstance(application)) as T
+            }
+        }
+    }
+    private val authViewModel: AuthViewModel by viewModels {
+        object : ViewModelProvider.Factory {
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                val tokenStore = AuthTokenStore(applicationContext)
+                val sessionManager = AuthSessionManager(tokenStore)
+                val baseUrl = getString(R.string.auth_api_base_url).trim().trimEnd('/')
+                Log.i("MainActivity", "Resolved auth_api_base_url=$baseUrl")
+                val apiClient = AuthApiClient(baseUrl)
+                val identityStore = BackendDeviceIdentityStore(applicationContext)
+                val linkManager = DeviceLinkManager(
+                    context = applicationContext,
+                    identityStore = identityStore,
+                    deviceLinkApiClient = DeviceLinkApiClient(baseUrl)
+                )
+                @Suppress("UNCHECKED_CAST")
+                return AuthViewModel(apiClient, sessionManager, linkManager) as T
             }
         }
     }
@@ -99,15 +126,56 @@ class MainActivity : ComponentActivity() {
         )
         
         setContent {
+            val authStatus by authViewModel.authStatus.collectAsState()
+
+            LaunchedEffect(authStatus) {
+                when (val status = authStatus) {
+                    AuthSessionManager.Status.Loading -> {
+                        Log.d("MainActivity", "Auth status=Loading")
+                    }
+
+                    AuthSessionManager.Status.Unauthenticated -> {
+                        Log.i("MainActivity", "Auth status=Unauthenticated")
+                    }
+
+                    is AuthSessionManager.Status.Authenticated -> {
+                        Log.i("MainActivity", "Auth status=Authenticated userId=${status.session.userId}")
+                        authViewModel.ensureLinkedForCurrentSession()
+                    }
+                }
+            }
+
             BitchatTheme {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    containerColor = MaterialTheme.colorScheme.background
-                ) { innerPadding ->
-                    OnboardingFlowScreen(modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                    )
+                when (authStatus) {
+                    AuthSessionManager.Status.Loading -> {
+                        InitializingScreen(Modifier.fillMaxSize())
+                    }
+
+                    AuthSessionManager.Status.Unauthenticated -> {
+                        AuthGateScreen(
+                            viewModel = authViewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    is AuthSessionManager.Status.Authenticated -> {
+                        LaunchedEffect(Unit) {
+                            if (mainViewModel.onboardingState.value == OnboardingState.CHECKING) {
+                                checkOnboardingStatus()
+                            }
+                        }
+
+                        Scaffold(
+                            modifier = Modifier.fillMaxSize(),
+                            containerColor = MaterialTheme.colorScheme.background
+                        ) { innerPadding ->
+                            OnboardingFlowScreen(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(innerPadding)
+                            )
+                        }
+                    }
                 }
             }
 //            MaterialTheme {
@@ -126,11 +194,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         
-        // Only start onboarding process if we're in the initial CHECKING state
-        // This prevents restarting onboarding on configuration changes
-        if (mainViewModel.onboardingState.value == OnboardingState.CHECKING) {
-            checkOnboardingStatus()
-        }
     }
     
     @Composable

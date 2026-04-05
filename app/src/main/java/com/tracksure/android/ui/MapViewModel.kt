@@ -28,13 +28,22 @@ class MapViewModel(
     private val locationChannelManager = LocationChannelManager.getInstance(application)
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val prefs = application.getSharedPreferences("tracksure_prefs", Context.MODE_PRIVATE)
+    private val trackingPrefs = application.getSharedPreferences("tracksure_tracking_prefs", Context.MODE_PRIVATE)
+
+    companion object {
+        private const val KEY_OWNER_INVITE = "owner_tracking_invite"
+        private const val KEY_IMPORTED_INVITE = "imported_tracking_invite"
+    }
 
     // --- Settings Data ---
     private val _myNickname = MutableLiveData<String>()
     val myNickname: LiveData<String> = _myNickname
 
-    private val _myMagicCode = MutableLiveData<String>()
-    val myMagicCode: LiveData<String> = _myMagicCode
+    private val _ownerTrackingInvite = MutableLiveData<TrackingShareInvite?>()
+    val ownerTrackingInvite: LiveData<TrackingShareInvite?> = _ownerTrackingInvite
+
+    private val _importedTrackingInvite = MutableLiveData<TrackingShareInvite?>()
+    val importedTrackingInvite: LiveData<TrackingShareInvite?> = _importedTrackingInvite
 
     // --- Authorized Peers (Unlocked via Code) ---
     private val _authorizedPeers = MutableLiveData<Set<String>>(emptySet())
@@ -80,7 +89,8 @@ class MapViewModel(
     init {
         // Load Settings
         _myNickname.value = prefs.getString("nickname", "Unknown User")
-        _myMagicCode.value = prefs.getString("magic_code", "1234")
+        _ownerTrackingInvite.value = loadInvite(KEY_OWNER_INVITE)
+        _importedTrackingInvite.value = loadInvite(KEY_IMPORTED_INVITE)
 
         meshService.delegate = this
 
@@ -102,29 +112,73 @@ class MapViewModel(
 
     // --- Actions ---
 
-    fun updateSettings(newNickname: String, newCode: String) {
+    fun updateSettings(newNickname: String) {
         _myNickname.value = newNickname
-        _myMagicCode.value = newCode
         prefs.edit()
             .putString("nickname", newNickname)
-            .putString("magic_code", newCode)
             .apply()
     }
 
-    /**
-     * Authenticate tracking.
-     * Since we cannot modify the mesh protocol to verify the code remotely,
-     * we perform a client-side check. If the user enters a non-empty code
-     * (simulating they know the shared secret), we authorize the peer.
-     */
+    fun createOrRotateOwnerTrackingInvite(): TrackingShareInvite {
+        val invite = TrackingShareInvite.generate(
+            ownerPeerId = meshService.myPeerID,
+            ownerNickname = _myNickname.value.orEmpty()
+        )
+        _ownerTrackingInvite.value = invite
+        saveInvite(KEY_OWNER_INVITE, invite)
+        return invite
+    }
+
+    fun importTrackingInviteFromPayload(payload: String): TrackingShareInvite? {
+        val invite = TrackingShareInvite.fromPayload(payload.trim()) ?: return null
+        if (invite.isExpired()) return null
+        _importedTrackingInvite.value = invite
+        saveInvite(KEY_IMPORTED_INVITE, invite)
+        return invite
+    }
+
     fun authorizeTracking(peerId: String, inputCode: String): Boolean {
-        if (inputCode.isNotBlank()) {
-            val currentSet = _authorizedPeers.value.orEmpty().toMutableSet()
-            currentSet.add(peerId)
-            _authorizedPeers.value = currentSet
-            return true
+        val invite = _importedTrackingInvite.value ?: return false
+        if (invite.isExpired()) return false
+        if (!invite.ownerPeerId.trim().equals(peerId.trim(), ignoreCase = true)) return false
+
+        val expectedPassword = normalizeTrackingSecret(invite.password)
+        val providedPassword = normalizeTrackingSecret(inputCode)
+        if (expectedPassword != providedPassword) return false
+
+        val currentSet = _authorizedPeers.value.orEmpty().toMutableSet()
+        currentSet.add(peerId)
+        _authorizedPeers.value = currentSet
+
+        if (invite.oneTimeUse) {
+            clearImportedInvite()
         }
-        return false
+
+        return true
+    }
+
+    private fun clearImportedInvite() {
+        _importedTrackingInvite.value = null
+        trackingPrefs.edit().remove(KEY_IMPORTED_INVITE).apply()
+    }
+
+    private fun saveInvite(key: String, invite: TrackingShareInvite) {
+        trackingPrefs.edit().putString(key, invite.toPayload()).apply()
+    }
+
+    private fun loadInvite(key: String): TrackingShareInvite? {
+        val payload = trackingPrefs.getString(key, null) ?: return null
+        val invite = TrackingShareInvite.fromPayload(payload) ?: return null
+        return if (invite.isExpired()) null else invite
+    }
+
+    private fun normalizeTrackingSecret(value: String): String {
+        return value
+            .trim()
+            .uppercase()
+            .replace(" ", "")
+            .replace("-", "")
+            .replace(":", "")
     }
 
     private fun broadcastMyLocation(loc: Location) {

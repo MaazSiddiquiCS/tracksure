@@ -1,9 +1,14 @@
 package com.tracksure.android.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.preference.PreferenceManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,14 +23,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.data.position
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanIntentResult
+import com.journeyapps.barcodescanner.ScanOptions
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -45,7 +53,7 @@ fun MapScreen(viewModel: MapViewModel) {
     // --- Settings & Auth Data ---
     val authorizedPeers by viewModel.authorizedPeers.observeAsState(emptySet())
     val myNickname by viewModel.myNickname.observeAsState("")
-    val myMagicCode by viewModel.myMagicCode.observeAsState("")
+    val ownerInvite by viewModel.ownerTrackingInvite.observeAsState()
 
     // Map State
     var hasCenteredOnce by remember { mutableStateOf(false) }
@@ -53,14 +61,47 @@ fun MapScreen(viewModel: MapViewModel) {
 
     // --- Dialog States ---
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showShareDialog by remember { mutableStateOf(false) }
     var showTrackSelectionDialog by remember { mutableStateOf(false) }
-    var showPinEntryDialog by remember { mutableStateOf(false) }
+    var showTrackingAuthDialog by remember { mutableStateOf(false) }
 
     // --- Inputs ---
     var selectedPeerIdToTrack by remember { mutableStateOf<String?>(null) }
     var pinInput by remember { mutableStateOf("") }
+    var qrPayloadInput by remember { mutableStateOf("") }
     var editNickname by remember { mutableStateOf("") }
-    var editMagicCode by remember { mutableStateOf("") }
+
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result: ScanIntentResult ->
+        val payload = result.contents
+        if (payload.isNullOrBlank()) {
+            Toast.makeText(context, "QR scan cancelled", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        val imported = viewModel.importTrackingInviteFromPayload(payload)
+        if (imported == null) {
+            Toast.makeText(context, "Invalid or expired QR invite", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        selectedPeerIdToTrack = imported.ownerPeerId
+        qrPayloadInput = payload
+        pinInput = imported.password
+        Toast.makeText(context, "Invite imported for ${imported.ownerNickname}", Toast.LENGTH_SHORT).show()
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val options = ScanOptions()
+                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setPrompt("Scan tracking invite QR")
+                .setBeepEnabled(true)
+                .setOrientationLocked(true)
+            scanLauncher.launch(options)
+        } else {
+            Toast.makeText(context, "Camera permission denied", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(Unit) {
         Configuration.getInstance().load(context, PreferenceManager.getDefaultSharedPreferences(context))
@@ -76,7 +117,6 @@ fun MapScreen(viewModel: MapViewModel) {
                 FloatingActionButton(
                     onClick = {
                         editNickname = myNickname
-                        editMagicCode = myMagicCode
                         showSettingsDialog = true
                     },
                     containerColor = MaterialTheme.colorScheme.secondaryContainer
@@ -84,7 +124,23 @@ fun MapScreen(viewModel: MapViewModel) {
                     Icon(Icons.Default.Settings, "Settings")
                 }
 
-                // 2. Track Device Button
+                // 2. Share Device Button
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        if (ownerInvite == null) {
+                            viewModel.createOrRotateOwnerTrackingInvite()
+                        }
+                        showShareDialog = true
+                    },
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                ) {
+                    Icon(Icons.Default.QrCode, "Share")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Share device")
+                }
+
+                // 3. Track Device Button
                 ExtendedFloatingActionButton(
                     onClick = { showTrackSelectionDialog = true },
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -95,7 +151,7 @@ fun MapScreen(viewModel: MapViewModel) {
                     Text("Track a device")
                 }
 
-                // 3. Center Button
+                // 4. Center Button
                 SmallFloatingActionButton(
                     onClick = {
                         myLocation?.let { loc ->
@@ -213,19 +269,11 @@ fun MapScreen(viewModel: MapViewModel) {
                                 label = { Text("Nickname") },
                                 singleLine = true
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = editMagicCode,
-                                onValueChange = { editMagicCode = it },
-                                label = { Text("Magic Code") },
-                                supportingText = { Text("Share this code to let others track you.") },
-                                singleLine = true
-                            )
                         }
                     },
                     confirmButton = {
                         TextButton(onClick = {
-                            viewModel.updateSettings(editNickname, editMagicCode)
+                            viewModel.updateSettings(editNickname)
                             showSettingsDialog = false
                             Toast.makeText(context, "Settings Saved", Toast.LENGTH_SHORT).show()
                         }) { Text("Save") }
@@ -236,7 +284,56 @@ fun MapScreen(viewModel: MapViewModel) {
                 )
             }
 
-            // 2. Select Device Dialog
+            // 2. Share Dialog
+            if (showShareDialog) {
+                val invite = ownerInvite
+                val qrPayload = invite?.toPayload().orEmpty()
+                val qrBitmap = remember(qrPayload) { encodeTrackingInviteAsQrBitmap(qrPayload) }
+
+                AlertDialog(
+                    onDismissRequest = { showShareDialog = false },
+                    title = { Text("Share Tracking", fontFamily = FontFamily.Monospace) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (invite == null) {
+                                Text("Generate an invite to share your location access.")
+                            } else {
+                                Text("Ask follower to scan this QR, then enter password.")
+                                Text("Device ID: ${invite.ownerPeerId.take(6)}...", fontSize = 12.sp)
+                                Text("Password: ${invite.password}", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                qrBitmap?.let {
+                                    Image(
+                                        bitmap = it.asImageBitmap(),
+                                        contentDescription = "Tracking invite QR",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(240.dp)
+                                    )
+                                }
+                                OutlinedTextField(
+                                    value = qrPayload,
+                                    onValueChange = {},
+                                    label = { Text("QR payload") },
+                                    readOnly = true,
+                                    minLines = 3,
+                                    maxLines = 5,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { viewModel.createOrRotateOwnerTrackingInvite() }) {
+                            Text("Regenerate")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showShareDialog = false }) { Text("Close") }
+                    }
+                )
+            }
+
+            // 3. Select Device Dialog
             if (showTrackSelectionDialog) {
                 AlertDialog(
                     onDismissRequest = { showTrackSelectionDialog = false },
@@ -259,8 +356,9 @@ fun MapScreen(viewModel: MapViewModel) {
                                             if (!isTracked) {
                                                 selectedPeerIdToTrack = peer.id
                                                 pinInput = ""
+                                                qrPayloadInput = ""
                                                 showTrackSelectionDialog = false
-                                                showPinEntryDialog = true
+                                                showTrackingAuthDialog = true
                                             } else {
                                                 Toast.makeText(context, "Already tracking", Toast.LENGTH_SHORT).show()
                                             }
@@ -277,36 +375,69 @@ fun MapScreen(viewModel: MapViewModel) {
                 )
             }
 
-            // 3. PIN Entry Dialog
-            if (showPinEntryDialog && selectedPeerIdToTrack != null) {
+            // 4. Tracking Auth Dialog
+            if (showTrackingAuthDialog && selectedPeerIdToTrack != null) {
                 AlertDialog(
-                    onDismissRequest = { showPinEntryDialog = false },
-                    title = { Text("Enter Magic Code", fontFamily = FontFamily.Monospace) },
+                    onDismissRequest = { showTrackingAuthDialog = false },
+                    title = { Text("Unlock Tracking", fontFamily = FontFamily.Monospace) },
                     text = {
-                        Column {
-                            Text("Enter the code shared by this user.")
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Scan invite QR and enter password.")
+                            Button(onClick = {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                    val options = ScanOptions()
+                                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                        .setPrompt("Scan tracking invite QR")
+                                        .setBeepEnabled(true)
+                                        .setOrientationLocked(true)
+                                    scanLauncher.launch(options)
+                                } else {
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
+                            }) {
+                                Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Scan QR")
+                            }
+                            OutlinedTextField(
+                                value = qrPayloadInput,
+                                onValueChange = { qrPayloadInput = it },
+                                label = { Text("QR payload (optional paste)") },
+                                minLines = 2,
+                                maxLines = 4,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = pinInput,
                                 onValueChange = { pinInput = it },
-                                label = { Text("Code") },
+                                label = { Text("Password") },
                                 singleLine = true
                             )
                         }
                     },
                     confirmButton = {
                         Button(onClick = {
+                            if (qrPayloadInput.isNotBlank()) {
+                                val imported = viewModel.importTrackingInviteFromPayload(qrPayloadInput)
+                                if (imported == null) {
+                                    Toast.makeText(context, "Invalid or expired QR payload", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                selectedPeerIdToTrack = imported.ownerPeerId
+                            }
+
                             val success = viewModel.authorizeTracking(selectedPeerIdToTrack!!, pinInput)
                             if (success) {
                                 Toast.makeText(context, "Tracking Started", Toast.LENGTH_SHORT).show()
-                                showPinEntryDialog = false
+                                showTrackingAuthDialog = false
                             } else {
-                                Toast.makeText(context, "Invalid Code", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Verification failed. Ensure selected device matches scanned invite.", Toast.LENGTH_SHORT).show()
                             }
                         }) { Text("Verify") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showPinEntryDialog = false }) { Text("Cancel") }
+                        TextButton(onClick = { showTrackingAuthDialog = false }) { Text("Cancel") }
                     }
                 )
             }

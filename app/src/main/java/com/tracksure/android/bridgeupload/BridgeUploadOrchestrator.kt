@@ -234,6 +234,7 @@ class BridgeUploadOrchestrator(
         Log.d(TAG, "flushNow ready=${ready.size} valid=${valid.size} groups=${grouped.size}")
 
         val uploadedIds = mutableSetOf<String>()
+        val fatalIds = mutableSetOf<String>()
         val retryUpdates = mutableListOf<QueuedPoint>()
         var failedRetryable = 0
         var failedFatal = 0
@@ -272,14 +273,14 @@ class BridgeUploadOrchestrator(
                 }
                 is LocationBatchApiClient.UploadResult.FatalError -> {
                     failedFatal += points.size
-                    retryUpdates += points.map { nextRetry(it, batchUuid, fatal = true) }
+                    fatalIds += points.map { it.clientPointId }
                     Log.w(TAG, "flush fatal error code=${result.code} msg=${result.message}")
                 }
             }
         }
 
         val invalidIds = ready.filterNot { isValidLatLon(it.lat, it.lon) }.map { it.clientPointId }.toSet()
-        queueStore.removeByClientPointIds(uploadedIds + invalidIds)
+        queueStore.removeByClientPointIds(uploadedIds + invalidIds + fatalIds)
         queueStore.upsertAll(retryUpdates)
 
         val remaining = queueStore.size()

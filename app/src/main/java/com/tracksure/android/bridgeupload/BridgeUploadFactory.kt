@@ -26,7 +26,11 @@ object BridgeUploadFactory {
         )
 
         val snapshotAdapter = MeshLocationSnapshotAdapter(appContext)
-        val queueStore = LocationUploadQueueStore(queueFile, gson)
+        val queueStore = LocationUploadQueueStore(
+            queueFile = queueFile,
+            minMovementMeters = config.minMovementMetersForQueueWrite,
+            gson = gson
+        )
         val connectivityGate = ConnectivityGate(appContext, config)
         val tokenStore = AuthTokenStore(appContext)
         val apiClient = LocationBatchApiClient(

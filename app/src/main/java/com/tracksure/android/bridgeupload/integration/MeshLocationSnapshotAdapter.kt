@@ -12,6 +12,7 @@ import com.tracksure.android.mesh.PeerInfo
 class MeshLocationSnapshotAdapter(private val context: Context) {
     companion object {
         private const val TAG = "BridgeUpload"
+        private const val MAX_REMOTE_STALENESS_MS = 2 * 60 * 1000L
     }
 
     private val locationChannelManager by lazy { LocationChannelManager.getInstance(context.applicationContext) }
@@ -69,8 +70,16 @@ class MeshLocationSnapshotAdapter(private val context: Context) {
     ): List<MeshLocationSnapshot> {
         var droppedMissingInfo = 0
         var droppedMissingCoord = 0
+        var droppedStale = 0
         val snapshots = peerIds.mapNotNull { peerId ->
             val info = peerInfoProvider(peerId) ?: return@mapNotNull null
+
+            val normalizedLastSeenMs = normalizeEpochMillis(info.lastSeen)
+            if (normalizedLastSeenMs > 0L && nowEpochMs - normalizedLastSeenMs > MAX_REMOTE_STALENESS_MS) {
+                droppedStale++
+                return@mapNotNull null
+            }
+
             val lat = info.latitude
             val lon = info.longitude
             if (lat == null || lon == null) {
@@ -84,14 +93,19 @@ class MeshLocationSnapshotAdapter(private val context: Context) {
                 recordedAtEpochMs = info.lastSeen.takeIf { it > 0L } ?: nowEpochMs
             )
         }
-        droppedMissingInfo = peerIds.size - snapshots.size - droppedMissingCoord
-        if (droppedMissingInfo > 0 || droppedMissingCoord > 0) {
+        droppedMissingInfo = peerIds.size - snapshots.size - droppedMissingCoord - droppedStale
+        if (droppedMissingInfo > 0 || droppedMissingCoord > 0 || droppedStale > 0) {
             Log.d(
                 TAG,
-                "Snapshot dropped missingInfo=$droppedMissingInfo missingCoords=$droppedMissingCoord"
+                "Snapshot dropped missingInfo=$droppedMissingInfo missingCoords=$droppedMissingCoord stale=$droppedStale"
             )
         }
         return snapshots
+    }
+
+    private fun normalizeEpochMillis(value: Long): Long {
+        if (value <= 0L) return value
+        return if (value < 10_000_000_000L) value * 1000L else value
     }
 }
 

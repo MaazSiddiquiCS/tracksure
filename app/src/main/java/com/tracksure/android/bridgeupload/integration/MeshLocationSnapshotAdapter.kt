@@ -2,6 +2,7 @@ package com.tracksure.android.bridgeupload.integration
 
 import android.content.Context
 import android.util.Log
+import com.tracksure.android.geohash.LocationChannelManager
 import com.tracksure.android.mesh.BluetoothMeshService
 import com.tracksure.android.mesh.PeerInfo
 
@@ -12,6 +13,8 @@ class MeshLocationSnapshotAdapter(private val context: Context) {
     companion object {
         private const val TAG = "BridgeUpload"
     }
+
+    private val locationChannelManager by lazy { LocationChannelManager.getInstance(context.applicationContext) }
 
     data class MeshLocationSnapshot(
         val peerId: String,
@@ -24,10 +27,39 @@ class MeshLocationSnapshotAdapter(private val context: Context) {
 
     fun captureSnapshots(nowEpochMs: Long = System.currentTimeMillis()): List<MeshLocationSnapshot> {
         val mesh = BluetoothMeshService.getInstance(context)
-        val peerIds = (mesh.getPeerNicknames().keys + mesh.myPeerID).toSet()
-        val snapshots = toSnapshots(peerIds, nowEpochMs) { peerId -> mesh.getPeerInfo(peerId) }
-        Log.d(TAG, "Snapshot capture peerIds=${peerIds.size} validSnapshots=${snapshots.size}")
+        val remotePeerIds = mesh.getPeerNicknames().keys
+        val remoteSnapshots = toSnapshots(remotePeerIds, nowEpochMs) { peerId -> mesh.getPeerInfo(peerId) }
+
+        val hasSelfInRemote = remoteSnapshots.any { it.peerId.equals(mesh.myPeerID, ignoreCase = true) }
+        val selfSnapshot = if (hasSelfInRemote) null else captureSelfSnapshot(mesh, nowEpochMs)
+        val snapshots = if (selfSnapshot != null) remoteSnapshots + selfSnapshot else remoteSnapshots
+
+        Log.d(TAG, "Snapshot capture peerIds=${remotePeerIds.size + 1} validSnapshots=${snapshots.size}")
         return snapshots
+    }
+
+    private fun captureSelfSnapshot(mesh: BluetoothMeshService, nowEpochMs: Long): MeshLocationSnapshot? {
+        val selfPeerId = mesh.myPeerID
+        val selfInfo = mesh.getPeerInfo(selfPeerId)
+        val infoLat = selfInfo?.latitude
+        val infoLon = selfInfo?.longitude
+
+        if (infoLat != null && infoLon != null) {
+            return MeshLocationSnapshot(
+                peerId = selfPeerId,
+                lat = infoLat,
+                lon = infoLon,
+                recordedAtEpochMs = selfInfo.lastSeen.takeIf { it > 0L } ?: nowEpochMs
+            )
+        }
+
+        val local = locationChannelManager.getCurrentLocation() ?: return null
+        return MeshLocationSnapshot(
+            peerId = selfPeerId,
+            lat = local.latitude,
+            lon = local.longitude,
+            recordedAtEpochMs = local.time.takeIf { it > 0L } ?: nowEpochMs
+        )
     }
 
     internal fun toSnapshots(

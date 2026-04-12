@@ -37,8 +37,8 @@
     <string name="battery_optimization_continue">Continue</string>
     <string name="retry">Retry</string>
     <string name="skip">Skip</string>
-    <string name="auth_api_base_url">http://192.168.18.246:8080</string>
-    <string name="bridge_upload_endpoint_url">http://192.168.18.246:8080/v1/locations:batch</string>
+    <string name="auth_api_base_url">http://13.50.248.167:8080</string>
+    <string name="bridge_upload_endpoint_url">http://13.50.248.167:8080/v1/locations:batch</string>
     <string name="bridge_upload_uploader_device_id">9007199254740991</string>
     <string name="bridge_upload_peer_map_json">{&quot;c3051653a3a8fab5&quot;:9007199254740991}</string>
 </resources>

@@ -12,6 +12,14 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
+# Preserve field names for Gson-backed payloads used by backend API contracts.
+-keepclassmembers class com.tracksure.android.bridgeupload.model.** {
+    <fields>;
+}
+-keepclassmembers class com.tracksure.android.net.** {
+    <fields>;
+}
+
 # Keep SecureIdentityStateManager from being obfuscated to prevent reflection issues
 -keep class com.tracksure.android.identity.SecureIdentityStateManager {
     private android.content.SharedPreferences prefs;

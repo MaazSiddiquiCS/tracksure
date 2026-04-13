@@ -1,12 +1,14 @@
 package com.tracksure.android.bridgeupload.model
 
+import com.google.gson.annotations.SerializedName
+
 /**
  * Backend bulk upload request.
  */
 data class LocationBatchUploadRequest(
-    val clientBatchUuid: String,
-    val subjectPeerId: String,
-    val uploaderDeviceId: Long,
-    val points: List<LocationPointDto>
+    @SerializedName("clientBatchUuid") val clientBatchUuid: String,
+    @SerializedName("subjectPeerId") val subjectPeerId: String,
+    @SerializedName("uploaderDeviceId") val uploaderDeviceId: Long,
+    @SerializedName("points") val points: List<LocationPointDto>
 )
 

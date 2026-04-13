@@ -6,6 +6,12 @@
 -dontwarn org.bouncycastle.**
 -keep class org.bouncycastle.** { *; }
 
+# Preserve Gson field-name mappings used by @SerializedName in obfuscated builds.
+-keepattributes RuntimeVisibleAnnotations,RuntimeInvisibleAnnotations
+-keepclassmembers,allowobfuscation class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+
 # Keep SecureIdentityStateManager from being obfuscated to prevent reflection issues
 -keep class com.tracksure.android.identity.SecureIdentityStateManager {
     private android.content.SharedPreferences prefs;

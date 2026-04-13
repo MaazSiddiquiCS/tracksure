@@ -2,6 +2,7 @@ package com.tracksure.android.net
 
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -23,28 +24,28 @@ class AuthApiClient(
     }
 
     data class SignupRequest(
-        val username: String,
-        val email: String,
-        val password: String,
-        val confirmPassword: String
+        @SerializedName("username") val username: String,
+        @SerializedName("email") val email: String,
+        @SerializedName("password") val password: String,
+        @SerializedName("confirmPassword") val confirmPassword: String
     )
 
     data class LoginRequest(
-        val username: String,
-        val password: String
+        @SerializedName("username") val username: String,
+        @SerializedName("password") val password: String
     )
 
     data class LoginResponse(
-        val accessToken: String,
-        val refreshToken: String,
-        val userId: Long,
-        val username: String,
-        val email: String
+        @SerializedName("accessToken") val accessToken: String,
+        @SerializedName("refreshToken") val refreshToken: String,
+        @SerializedName("userId") val userId: Long,
+        @SerializedName("username") val username: String,
+        @SerializedName("email") val email: String
     )
 
     private data class ApiErrorResponse(
-        val message: String? = null,
-        val detail: String? = null
+        @SerializedName("message") val message: String? = null,
+        @SerializedName("detail") val detail: String? = null
     )
 
     private val normalizedBaseUrl: String = normalizeBaseUrl(baseUrl)

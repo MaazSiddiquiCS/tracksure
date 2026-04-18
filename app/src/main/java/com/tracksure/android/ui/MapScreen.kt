@@ -55,7 +55,7 @@ fun MapScreen(viewModel: MapViewModel) {
     val myNickname by viewModel.myNickname.observeAsState("")
     val ownerInvite by viewModel.ownerTrackingInvite.observeAsState()
 
-    // Map State
+    // Map State View
     var hasCenteredOnce by remember { mutableStateOf(false) }
     var mapController by remember { mutableStateOf<org.osmdroid.api.IMapController?>(null) }
 

@@ -1,15 +1,19 @@
 package com.tracksure.android.ui
 
 import android.app.Application
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.location.Location
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.tracksure.android.geohash.LocationChannelManager
+import com.tracksure.android.identity.AuthTokenStore
 import com.tracksure.android.mesh.BluetoothMeshDelegate
 import com.tracksure.android.mesh.BluetoothMeshService
 import com.tracksure.android.mesh.PeerInfo
@@ -29,6 +33,7 @@ class MapViewModel(
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val prefs = application.getSharedPreferences("tracksure_prefs", Context.MODE_PRIVATE)
     private val trackingPrefs = application.getSharedPreferences("tracksure_tracking_prefs", Context.MODE_PRIVATE)
+    private val authTokenStore = AuthTokenStore(application.applicationContext)
 
     companion object {
         private const val KEY_OWNER_INVITE = "owner_tracking_invite"
@@ -38,6 +43,12 @@ class MapViewModel(
     // --- Settings Data ---
     private val _myNickname = MutableLiveData<String>()
     val myNickname: LiveData<String> = _myNickname
+
+    private val _accountUsername = MutableLiveData<String>()
+    val accountUsername: LiveData<String> = _accountUsername
+
+    private val _accountEmail = MutableLiveData<String>()
+    val accountEmail: LiveData<String> = _accountEmail
 
     private val _ownerTrackingInvite = MutableLiveData<TrackingShareInvite?>()
     val ownerTrackingInvite: LiveData<TrackingShareInvite?> = _ownerTrackingInvite
@@ -87,8 +98,21 @@ class MapViewModel(
     private val BROADCAST_INTERVAL = 5000L
 
     init {
+        refreshAccountProfile()
+
         // Load Settings
-        _myNickname.value = prefs.getString("nickname", "Unknown User")
+        val savedNickname = prefs.getString("nickname", null)?.trim().orEmpty()
+        val resolvedNickname = if (savedNickname.shouldUseDeviceNameAsDefault()) {
+            resolveLocalDeviceName()
+        } else {
+            savedNickname
+        }
+
+        _myNickname.value = resolvedNickname
+        state.setNickname(resolvedNickname)
+        if (savedNickname != resolvedNickname) {
+            prefs.edit().putString("nickname", resolvedNickname).apply()
+        }
         _ownerTrackingInvite.value = loadInvite(KEY_OWNER_INVITE)
         _importedTrackingInvite.value = loadInvite(KEY_IMPORTED_INVITE)
 
@@ -113,10 +137,18 @@ class MapViewModel(
     // --- Actions ---
 
     fun updateSettings(newNickname: String) {
-        _myNickname.value = newNickname
+        val normalizedNickname = newNickname.trim().ifBlank { resolveLocalDeviceName() }
+        _myNickname.value = normalizedNickname
+        state.setNickname(normalizedNickname)
         prefs.edit()
-            .putString("nickname", newNickname)
+            .putString("nickname", normalizedNickname)
             .apply()
+    }
+
+    fun refreshAccountProfile() {
+        val session = authTokenStore.load()
+        _accountUsername.value = session?.username?.trim().takeIf { !it.isNullOrBlank() } ?: "Unknown user"
+        _accountEmail.value = session?.email?.trim().takeIf { !it.isNullOrBlank() } ?: ""
     }
 
     fun createOrRotateOwnerTrackingInvite(): TrackingShareInvite {
@@ -245,7 +277,7 @@ class MapViewModel(
     override fun handleMessage(routed: RoutedPacket) {}
     override fun handleAnnounce(routed: RoutedPacket) { refreshPeerList() }
     override fun handleLeave(routed: RoutedPacket) { refreshPeerList() }
-    override fun getNickname(): String = state.getNicknameValue()
+    override fun getNickname(): String = _myNickname.value?.takeIf { it.isNotBlank() } ?: state.getNicknameValue()
     override fun isFavorite(peerID: String): Boolean = false
     override fun handleFragment(packet: BitchatPacket): BitchatPacket? = null
     override fun handleRequestSync(routed: RoutedPacket) {}
@@ -256,10 +288,77 @@ class MapViewModel(
     override fun getNetworkSize(): Int = 0
     override fun getBroadcastRecipient(): ByteArray = ByteArray(0)
     override fun relayPacket(routed: RoutedPacket) {}
-    override fun getPeerNickname(peerID: String): String? = null
+    override fun getPeerNickname(peerID: String): String? = meshService.getPeerNicknames()[peerID]
     override fun didReceiveMessage(message: BitchatMessage) {}
     override fun didReceiveChannelLeave(channel: String, fromPeer: String) {}
     override fun didReceiveDeliveryAck(messageID: String, recipientPeerID: String) {}
     override fun didReceiveReadReceipt(messageID: String, recipientPeerID: String) {}
     override fun decryptChannelMessage(encryptedContent: ByteArray, channel: String): String? = null
+
+    fun getDisplayNameForPeer(peerID: String, fallbackNickname: String? = null): String {
+        val meshNickname = meshService.getPeerNicknames()[peerID]?.trim()
+        if (meshNickname.isUsableDisplayNameForPeer(peerID)) {
+            return meshNickname.orEmpty()
+        }
+
+        val bluetoothDeviceName = meshService.connectionManager.getDeviceNameForPeer(peerID)?.trim()
+        if (bluetoothDeviceName.isUsableDisplayNameForPeer(peerID)) {
+            return bluetoothDeviceName.orEmpty()
+        }
+
+        val fallback = fallbackNickname?.trim()
+        if (fallback.isUsableDisplayNameForPeer(peerID)) {
+            return fallback.orEmpty()
+        }
+
+        return "Unknown device"
+    }
+
+    private fun resolveLocalDeviceName(): String {
+        val bluetoothName = try {
+            val manager = getApplication<Application>().getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            manager?.adapter?.name?.trim()?.takeIf { it.isNotBlank() }
+        } catch (_: SecurityException) {
+            null
+        } catch (_: Exception) {
+            null
+        }
+
+        val systemDeviceName = try {
+            Settings.Global.getString(getApplication<Application>().contentResolver, "device_name")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+
+        val modelFallback = listOfNotNull(
+            Build.MANUFACTURER?.trim()?.takeIf { it.isNotBlank() },
+            Build.MODEL?.trim()?.takeIf { it.isNotBlank() }
+        ).joinToString(" ").trim().takeIf { it.isNotBlank() }
+
+        return (bluetoothName ?: systemDeviceName ?: modelFallback ?: "android-device").take(64)
+    }
+
+    private fun String?.isUsableDisplayNameForPeer(peerID: String): Boolean {
+        val value = this?.trim().orEmpty()
+        if (value.isBlank()) return false
+        if (value.equals(peerID, ignoreCase = true)) return false
+        if (value.equals("Unknown", ignoreCase = true) || value.equals("Unknown User", ignoreCase = true)) return false
+        if (value.isAutogeneratedPeerLabel()) return false
+        return true
+    }
+
+    private fun String.shouldUseDeviceNameAsDefault(): Boolean {
+        if (this.isBlank()) return true
+        if (this.equals("Unknown", ignoreCase = true) || this.equals("Unknown User", ignoreCase = true)) return true
+        if (this.startsWith("anon", ignoreCase = true)) return true
+        if (this.isAutogeneratedPeerLabel()) return true
+        return false
+    }
+
+    private fun String.isAutogeneratedPeerLabel(): Boolean {
+        val normalized = this.trim()
+        return Regex("^(?i)(peer|device)\\s+[0-9a-f]{4,16}$").matches(normalized)
+    }
 }

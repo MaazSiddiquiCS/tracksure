@@ -516,14 +516,22 @@ class BluetoothMeshService(private val context: Context) {
                 val payloadStr = routed.packet.payload.toString(Charsets.UTF_8)
 
                 try {
+                    // Keep peerID->device mapping updated even before announce arrives.
+                    val deviceAddress = routed.relayAddress
+                    if (deviceAddress != null && !connectionManager.addressPeerMap.containsKey(deviceAddress)) {
+                        connectionManager.addressPeerMap[deviceAddress] = peerID
+                    }
+
                     // Assuming your payload is "lat,lng" (e.g., "37.7749,-122.4194")
                     val parts = payloadStr.split(",")
                     if (parts.size >= 2) {
                         val lat = parts[0].trim().toDouble()
                         val lng = parts[1].trim().toDouble()
 
+                        val deviceNameHint = connectionManager.getDeviceNameForPeer(peerID)
+
                         // Store in PeerManager
-                        peerManager.updatePeerLocation(peerID, lat, lng)
+                        peerManager.updatePeerLocation(peerID, lat, lng, deviceNameHint)
                         Log.d(TAG, "Stored location for $peerID: $lat, $lng")
                         //delegate?.handleLocationUpdate(routed)
                     }
@@ -913,84 +921,41 @@ class BluetoothMeshService(private val context: Context) {
     fun sendBroadcastAnnounce() {
         Log.d(TAG, "Sending broadcast announce")
         serviceScope.launch {
+            val nickname = delegate?.getNickname() ?: myPeerID
 
-            // --- START: YOUR NEW, CORRECTED CODE ---
-
-// 1. Define a placeholder location string.
-            val currentLocation= locationChannelManager.getCurrentLocation()
-
-            if (currentLocation == null) {
-                Log.e(TAG, "❌ Failed to get current location")
+            val staticKey = encryptionService.getStaticPublicKey()
+            if (staticKey == null) {
+                Log.e(TAG, "No static public key available for announcement")
                 return@launch
             }
-            val locationString = "${currentLocation.latitude},${currentLocation.longitude}" // Fake GPS for New York City
 
-// 2. Convert the location string to a byte array.
-            val locationPayload = locationString.toByteArray(Charsets.UTF_8)
+            val signingKey = encryptionService.getSigningPublicKey()
+            if (signingKey == null) {
+                Log.e(TAG, "No signing public key available for announcement")
+                return@launch
+            }
 
-// 3. Create the BitchatPacket with a custom type and your new location payload.
-            val locationPacket = BitchatPacket(
-                type = MessageType.LOCATION_UPDATE.value, // Using a custom type for location
-                ttl = MAX_TTL,    // Time-to-live of 1
+            val announcement = IdentityAnnouncement(nickname, staticKey, signingKey)
+            val tlvPayload = announcement.encode()
+            if (tlvPayload == null) {
+                Log.e(TAG, "Failed to encode announcement as TLV")
+                return@launch
+            }
+
+            val announcePacket = BitchatPacket(
+                type = MessageType.ANNOUNCE.value,
+                ttl = MAX_TTL,
                 senderID = myPeerID,
-                payload = locationPayload
+                payload = tlvPayload
             )
 
-// 4. Log what you are about to send.
-            Log.d(TAG, "Broadcasting current LOCATION packet: $locationString")
+            val signedPacket = encryptionService.signData(announcePacket.toBinaryDataForSigning()!!)?.let { signature ->
+                announcePacket.copy(signature = signature)
+            } ?: announcePacket
 
-// 5. CORRECT WAY TO SIGN: Use the encryptionService to create a signature.
-//    Then, create a *new* signed packet by copying the old one and adding the signature.
-            val signedPacket = encryptionService.signData(locationPacket.toBinaryDataForSigning()!!)?.let { signature ->
-                locationPacket.copy(signature = signature)
-            } ?: locationPacket // If signing fails, use the original packet.
-
-// 6. CORRECT PACKET TO SEND: Send the 'signedPacket' you just created.
             connectionManager.broadcastPacket(RoutedPacket(signedPacket))
-
-// --- END: YOUR NEW, CORRECTED CODE ---
-
-
-//            val nickname = delegate?.getNickname() ?: myPeerID
-//
-//            // Get the static public key for the announcement
-//            val staticKey = encryptionService.getStaticPublicKey()
-//            if (staticKey == null) {
-//                Log.e(TAG, "No static public key available for announcement")
-//                return@launch
-//            }
-//
-//            // Get the signing public key for the announcement
-//            val signingKey = encryptionService.getSigningPublicKey()
-//            if (signingKey == null) {
-//                Log.e(TAG, "No signing public key available for announcement")
-//                return@launch
-//            }
-//
-//            // Create iOS-compatible IdentityAnnouncement with TLV encoding
-//            val announcement = IdentityAnnouncement(nickname, staticKey, signingKey)
-//            val tlvPayload = announcement.encode()
-//            if (tlvPayload == null) {
-//                Log.e(TAG, "Failed to encode announcement as TLV")
-//                return@launch
-//            }
-//
-//            val announcePacket = BitchatPacket(
-//                type = MessageType.ANNOUNCE.value,
-//                ttl = MAX_TTL,
-//                senderID = myPeerID,
-//                payload = tlvPayload
-//            )
-//
-//            // Sign the packet using our signing key (exactly like iOS)
-//            val signedPacket = encryptionService.signData(announcePacket.toBinaryDataForSigning()!!)?.let { signature ->
-//                announcePacket.copy(signature = signature)
-//            } ?: announcePacket
-//
-//            connectionManager.broadcastPacket(RoutedPacket(signedPacket))
-//            Log.d(TAG, "Sent iOS-compatible signed TLV announce (${tlvPayload.size} bytes)")
-//            // Track announce for sync
-//            try { gossipSyncManager.onPublicPacketSeen(signedPacket) } catch (_: Exception) { }
+            Log.d(TAG, "Sent iOS-compatible signed TLV announce (${tlvPayload.size} bytes)")
+            try { gossipSyncManager.onPublicPacketSeen(signedPacket) } catch (_: Exception) { }
         }
     }
     

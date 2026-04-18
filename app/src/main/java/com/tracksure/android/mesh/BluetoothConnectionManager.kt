@@ -291,6 +291,33 @@ class BluetoothConnectionManager(
         }
     }
 
+    /**
+     * Resolve a human-readable Bluetooth device name for a known peer ID.
+     * Keeps peerID as the primary protocol identity and only provides UI display fallback.
+     */
+    fun getDeviceNameForPeer(peerID: String): String? {
+        return try {
+            val deviceAddress = addressPeerMap.entries.firstOrNull { it.value == peerID }?.key ?: return null
+
+            val fromActiveConnection = connectionTracker.getConnectedDevices()[deviceAddress]
+                ?.device
+                ?.name
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+            if (fromActiveConnection != null) return fromActiveConnection
+
+            bluetoothAdapter
+                ?.getRemoteDevice(deviceAddress)
+                ?.name
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        } catch (_: SecurityException) {
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     // Expose local adapter address for debug UI
     fun getLocalAdapterAddress(): String? = try { bluetoothAdapter?.address } catch (e: Exception) { null }
 

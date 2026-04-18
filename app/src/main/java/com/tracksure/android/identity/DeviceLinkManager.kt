@@ -1,6 +1,8 @@
 package com.tracksure.android.identity
 
+import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import com.tracksure.android.bridgeupload.BridgeUploadRuntime
@@ -35,8 +37,9 @@ class DeviceLinkManager(
         )
 
         Log.d(TAG, "Linking device with peerId=$meshPeerId")
+        val publishedDeviceName = resolvePublishedDeviceName()
 
-        return when (val result = deviceLinkApiClient.linkDevice(accessToken, meshPeerId, deviceName = "tracksure-android")) {
+        return when (val result = deviceLinkApiClient.linkDevice(accessToken, meshPeerId, deviceName = publishedDeviceName)) {
             is DeviceLinkApiClient.Result.Success -> {
                 val identity = BackendDeviceIdentity(
                     backendDeviceId = result.value.deviceId,
@@ -81,5 +84,31 @@ class DeviceLinkManager(
             Log.i(TAG, "Using ANDROID_ID fallback peerId=$fallback")
         }
         return fallback
+    }
+
+    private fun resolvePublishedDeviceName(): String {
+        val bluetoothName = try {
+            val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            manager?.adapter?.name?.trim()?.takeIf { it.isNotBlank() }
+        } catch (_: SecurityException) {
+            null
+        } catch (_: Exception) {
+            null
+        }
+
+        val systemDeviceName = try {
+            Settings.Global.getString(context.contentResolver, "device_name")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+
+        val modelFallback = listOfNotNull(
+            Build.MANUFACTURER?.trim()?.takeIf { it.isNotBlank() },
+            Build.MODEL?.trim()?.takeIf { it.isNotBlank() }
+        ).joinToString(" ").trim().takeIf { it.isNotBlank() }
+
+        return (bluetoothName ?: systemDeviceName ?: modelFallback ?: "android-device").take(64)
     }
 }

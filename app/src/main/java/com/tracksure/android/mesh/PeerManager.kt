@@ -166,15 +166,23 @@ class PeerManager {
     fun getVerifiedPeers(): Map<String, PeerInfo> {
         return peers.filterValues { it.isVerifiedNickname }
     }
-    fun updatePeerLocation(peerID: String, lat: Double, lng: Double) {
+    fun updatePeerLocation(peerID: String, lat: Double, lng: Double, deviceNameHint: String? = null) {
         if (peerID == "unknown") return
         val now = System.currentTimeMillis()
         val existing = peers[peerID]
+        val normalizedDeviceName = deviceNameHint?.trim()?.takeIf { it.isNotBlank() }
 
         if (existing != null) {
+            val resolvedNickname = if (normalizedDeviceName != null && shouldReplaceNicknameWithDeviceName(existing.nickname, peerID)) {
+                normalizedDeviceName
+            } else {
+                existing.nickname
+            }
+
             // Update existing peer
             // CRITICAL: This updates 'lastSeen', which prevents the cleanup logic from deleting it
             peers[peerID] = existing.copy(
+                nickname = resolvedNickname,
                 latitude = lat,
                 longitude = lng,
                 lastSeen = now,
@@ -185,7 +193,7 @@ class PeerManager {
             val shortId = peerID.take(4)
             val newPeer = PeerInfo(
                 id = peerID,
-                nickname = "Peer $shortId",
+                nickname = normalizedDeviceName ?: "Unknown device",
                 isConnected = true,
                 isDirectConnection = true,
                 noisePublicKey = null,
@@ -196,13 +204,22 @@ class PeerManager {
                 longitude = lng
             )
             peers[peerID] = newPeer
-            Log.d(TAG, "🆕 Created new peer from location data: Peer $shortId at $lat, $lng")
+            Log.d(TAG, "🆕 Created new peer from location data: ${newPeer.nickname} ($shortId) at $lat, $lng")
         }
 
         // CRITICAL FIX:
         // Always notify the UI. Your previous code might have had this inside an 'else' block or
         // failed to trigger if the peer was just "updated" vs "created".
         notifyPeerListUpdate()
+    }
+
+    private fun shouldReplaceNicknameWithDeviceName(currentNickname: String, peerID: String): Boolean {
+        val nickname = currentNickname.trim()
+        if (nickname.isBlank()) return true
+        if (nickname.equals(peerID, ignoreCase = true)) return true
+        if (nickname.equals("unknown", ignoreCase = true) || nickname.equals("unknown user", ignoreCase = true)) return true
+        if (Regex("^(?i)(peer|device)\\s+[0-9a-f]{4,16}$").matches(nickname)) return true
+        return false
     }
 
     /**

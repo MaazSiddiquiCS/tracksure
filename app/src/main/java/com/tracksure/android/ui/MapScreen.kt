@@ -6,6 +6,7 @@ import android.preference.PreferenceManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanIntentResult
@@ -53,14 +57,17 @@ fun MapScreen(viewModel: MapViewModel) {
     // --- Settings & Auth Data ---
     val authorizedPeers by viewModel.authorizedPeers.observeAsState(emptySet())
     val myNickname by viewModel.myNickname.observeAsState("")
+    val accountUsername by viewModel.accountUsername.observeAsState("Unknown user")
+    val accountEmail by viewModel.accountEmail.observeAsState("")
     val ownerInvite by viewModel.ownerTrackingInvite.observeAsState()
+    val importedInvite by viewModel.importedTrackingInvite.observeAsState()
 
     // Map State View
     var hasCenteredOnce by remember { mutableStateOf(false) }
     var mapController by remember { mutableStateOf<org.osmdroid.api.IMapController?>(null) }
 
     // --- Dialog States ---
-    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showProfileScreen by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
     var showTrackSelectionDialog by remember { mutableStateOf(false) }
     var showTrackingAuthDialog by remember { mutableStateOf(false) }
@@ -113,15 +120,16 @@ fun MapScreen(viewModel: MapViewModel) {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Settings Button
+                // 1. Account Button
                 FloatingActionButton(
                     onClick = {
+                        viewModel.refreshAccountProfile()
                         editNickname = myNickname
-                        showSettingsDialog = true
+                        showProfileScreen = true
                     },
                     containerColor = MaterialTheme.colorScheme.secondaryContainer
                 ) {
-                    Icon(Icons.Default.Settings, "Settings")
+                    Icon(Icons.Default.AccountCircle, "Account")
                 }
 
                 // 2. Share Device Button
@@ -254,33 +262,19 @@ fun MapScreen(viewModel: MapViewModel) {
 
             // --- DIALOGS ---
 
-            // 1. Settings Dialog
-            if (showSettingsDialog) {
-                AlertDialog(
-                    onDismissRequest = { showSettingsDialog = false },
-                    title = { Text("My Settings", fontFamily = FontFamily.Monospace) },
-                    text = {
-                        Column {
-                            Text("Configure your details.")
-                            Spacer(modifier = Modifier.height(16.dp))
-                            OutlinedTextField(
-                                value = editNickname,
-                                onValueChange = { editNickname = it },
-                                label = { Text("Nickname") },
-                                singleLine = true
-                            )
-                        }
+            // 1. Profile Screen
+            if (showProfileScreen) {
+                ProfileScreenDialog(
+                    username = accountUsername,
+                    email = accountEmail,
+                    nickname = editNickname,
+                    onNicknameChange = { editNickname = it },
+                    onSave = {
+                        viewModel.updateSettings(editNickname)
+                        showProfileScreen = false
+                        Toast.makeText(context, "Profile saved", Toast.LENGTH_SHORT).show()
                     },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            viewModel.updateSettings(editNickname)
-                            showSettingsDialog = false
-                            Toast.makeText(context, "Settings Saved", Toast.LENGTH_SHORT).show()
-                        }) { Text("Save") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showSettingsDialog = false }) { Text("Cancel") }
-                    }
+                    onDismiss = { showProfileScreen = false }
                 )
             }
 
@@ -345,9 +339,14 @@ fun MapScreen(viewModel: MapViewModel) {
                             LazyColumn {
                                 items(peerLocations.values.toList()) { peer ->
                                     val isTracked = authorizedPeers.contains(peer.id)
+                                    val displayName = viewModel.getDisplayNameForPeer(peer.id, peer.nickname)
                                     ListItem(
-                                        headlineContent = { Text(peer.nickname, fontWeight = FontWeight.Bold) },
-                                        supportingContent = { Text("ID: ${peer.id.take(6)}...") },
+                                        headlineContent = { Text(displayName, fontWeight = FontWeight.Bold) },
+                                        supportingContent = {
+                                            Text(
+                                                if (isTracked) "Live tracking enabled" else "Tap to start tracking"
+                                            )
+                                        },
                                         leadingContent = { Icon(Icons.Default.Smartphone, null) },
                                         trailingContent = {
                                             if (isTracked) Icon(Icons.Default.CheckCircle, null, tint = Color.Green)
@@ -383,6 +382,9 @@ fun MapScreen(viewModel: MapViewModel) {
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Scan invite QR and enter password.")
+                            importedInvite?.let { invite ->
+                                Text("Authorized owner: ${invite.ownerNickname}", fontWeight = FontWeight.SemiBold)
+                            }
                             Button(onClick = {
                                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                                     val options = ScanOptions()
@@ -440,6 +442,116 @@ fun MapScreen(viewModel: MapViewModel) {
                         TextButton(onClick = { showTrackingAuthDialog = false }) { Text("Cancel") }
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileScreenDialog(
+    username: String,
+    email: String,
+    nickname: String,
+    onNicknameChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AccountCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("My Profile", style = MaterialTheme.typography.headlineSmall)
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Card {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("Account", style = MaterialTheme.typography.titleMedium)
+                        Text("Username: $username", fontWeight = FontWeight.Bold)
+                        Text("Email: ${if (email.isBlank()) "Not available" else email}")
+                    }
+                }
+
+                Card {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("Profile Settings", style = MaterialTheme.typography.titleMedium)
+                        OutlinedTextField(
+                            value = nickname,
+                            onValueChange = onNicknameChange,
+                            label = { Text("Nickname") },
+                            supportingText = { Text("Default is your device name. You can change it anytime.") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        HorizontalDivider()
+                        Text("More settings (static preview)", style = MaterialTheme.typography.bodyMedium)
+                        ListItem(
+                            headlineContent = { Text("Profile photo") },
+                            supportingContent = { Text("Coming soon") },
+                            leadingContent = { Icon(Icons.Default.Person, contentDescription = null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Privacy controls") },
+                            supportingContent = { Text("Coming soon") },
+                            leadingContent = { Icon(Icons.Default.Lock, contentDescription = null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Notification preferences") },
+                            supportingContent = { Text("Coming soon") },
+                            leadingContent = { Icon(Icons.Default.Notifications, contentDescription = null) }
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Close")
+                    }
+                    Button(
+                        onClick = onSave,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Save")
+                    }
+                }
             }
         }
     }

@@ -189,6 +189,13 @@ class MapViewModel(
         return true
     }
 
+    fun stopTracking(peerId: String) {
+        val currentSet = _authorizedPeers.value.orEmpty().toMutableSet()
+        if (currentSet.remove(peerId)) {
+            _authorizedPeers.value = currentSet
+        }
+    }
+
     private fun clearImportedInvite() {
         _importedTrackingInvite.value = null
         trackingPrefs.edit().remove(KEY_IMPORTED_INVITE).apply()

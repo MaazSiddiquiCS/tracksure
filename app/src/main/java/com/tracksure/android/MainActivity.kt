@@ -318,7 +318,10 @@ class MainActivity : ComponentActivity() {
                 // Ideally, for CHECKING/INITIALIZING, show a loading screen instead of MapScreen
                 // to prevent initializing ViewModel services before permissions are granted.
                 if (onboardingState == OnboardingState.COMPLETE) {
-                    MapScreen(viewModel = mapViewModel)
+                    MapScreen(
+                        viewModel = mapViewModel,
+                        onLogoutRequested = { authViewModel.logout() }
+                    )
                 } else {
                     InitializingScreen(modifier)
                 }

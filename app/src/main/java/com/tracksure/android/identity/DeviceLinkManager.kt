@@ -26,24 +26,23 @@ class DeviceLinkManager(
 
     suspend fun ensureLinked(accessToken: String): LinkStatus {
         val existing = identityStore.load()
-        if (existing != null) {
-            Log.d(TAG, "Using persisted identity backendDeviceId=${existing.backendDeviceId} meshPeerId=${existing.meshPeerId}")
-            return LinkStatus.Linked(existing)
-        }
-
-        val meshPeerId = resolveMyMeshPeerId() ?: return LinkStatus.Failed(
+        val meshPeerId = resolveMyMeshPeerId() ?: existing?.meshPeerId ?: return LinkStatus.Failed(
             message = "Mesh peer identity unavailable",
             retryable = true
         )
 
-        Log.d(TAG, "Linking device with peerId=$meshPeerId")
+        if (existing != null) {
+            Log.d(TAG, "Refreshing linked device backendDeviceId=${existing.backendDeviceId} peerId=$meshPeerId")
+        } else {
+            Log.d(TAG, "Linking device with peerId=$meshPeerId")
+        }
         val publishedDeviceName = resolvePublishedDeviceName()
 
         return when (val result = deviceLinkApiClient.linkDevice(accessToken, meshPeerId, deviceName = publishedDeviceName)) {
             is DeviceLinkApiClient.Result.Success -> {
                 val identity = BackendDeviceIdentity(
                     backendDeviceId = result.value.deviceId,
-                    meshPeerId = meshPeerId
+                    meshPeerId = result.value.peerId.trim().lowercase().ifBlank { meshPeerId }
                 )
                 identityStore.save(identity)
                 BridgeUploadRuntime.restartWithLatestIdentity(context.applicationContext)
@@ -53,7 +52,13 @@ class DeviceLinkManager(
 
             is DeviceLinkApiClient.Result.Error -> {
                 Log.w(TAG, "Device link failed code=${result.code} msg=${result.message}")
-                LinkStatus.Failed(result.message, result.retryable)
+                if (existing != null) {
+                    // Keep user signed in with cached identity if refresh-upsert fails temporarily.
+                    Log.w(TAG, "Using cached linked device identity after refresh failure")
+                    LinkStatus.Linked(existing)
+                } else {
+                    LinkStatus.Failed(result.message, result.retryable)
+                }
             }
         }
     }
@@ -89,7 +94,7 @@ class DeviceLinkManager(
     private fun resolvePublishedDeviceName(): String {
         val bluetoothName = try {
             val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-            manager?.adapter?.name?.trim()?.takeIf { it.isNotBlank() }
+            manager?.adapter?.name
         } catch (_: SecurityException) {
             null
         } catch (_: Exception) {
@@ -98,8 +103,6 @@ class DeviceLinkManager(
 
         val systemDeviceName = try {
             Settings.Global.getString(context.contentResolver, "device_name")
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
         } catch (_: Exception) {
             null
         }
@@ -109,6 +112,29 @@ class DeviceLinkManager(
             Build.MODEL?.trim()?.takeIf { it.isNotBlank() }
         ).joinToString(" ").trim().takeIf { it.isNotBlank() }
 
-        return (bluetoothName ?: systemDeviceName ?: modelFallback ?: "android-device").take(64)
+        return listOf(bluetoothName, systemDeviceName, modelFallback)
+            .mapNotNull { it?.trim()?.takeIf { name -> name.isUsableDeviceNameForRegistration() } }
+            .firstOrNull()
+            ?: "android-device"
+    }
+
+    private fun String.isUsableDeviceNameForRegistration(): Boolean {
+        if (isBlank()) return false
+
+        val normalized = lowercase()
+            .replace("_", "-")
+            .replace(" ", "-")
+
+        // Filter known legacy/debug placeholders so backend doesn't persist them.
+        val blocked = setOf(
+            "tracksure-android",
+            "tracksureandroid",
+            "android-device",
+            "android",
+            "unknown",
+            "unknown-device"
+        )
+
+        return normalized !in blocked
     }
 }

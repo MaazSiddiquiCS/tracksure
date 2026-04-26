@@ -45,7 +45,10 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 
 @Composable
-fun MapScreen(viewModel: MapViewModel) {
+fun MapScreen(
+    viewModel: MapViewModel,
+    onLogoutRequested: () -> Unit
+) {
     val context = LocalContext.current
 
     // Observe Data
@@ -75,7 +78,6 @@ fun MapScreen(viewModel: MapViewModel) {
     // --- Inputs ---
     var selectedPeerIdToTrack by remember { mutableStateOf<String?>(null) }
     var pinInput by remember { mutableStateOf("") }
-    var qrPayloadInput by remember { mutableStateOf("") }
     var editNickname by remember { mutableStateOf("") }
 
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result: ScanIntentResult ->
@@ -90,7 +92,6 @@ fun MapScreen(viewModel: MapViewModel) {
             return@rememberLauncherForActivityResult
         }
         selectedPeerIdToTrack = imported.ownerPeerId
-        qrPayloadInput = payload
         pinInput = imported.password
         Toast.makeText(context, "Invite imported for ${imported.ownerNickname}", Toast.LENGTH_SHORT).show()
     }
@@ -250,13 +251,13 @@ fun MapScreen(viewModel: MapViewModel) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isConnected) "Mesh Active" else "Scanning...",
+                            text = if (isConnected) "Online" else "Offline",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Peers Connected: $connectedCount", fontSize = 12.sp)
+                    Text("In Range: $connectedCount", fontSize = 12.sp)
                 }
             }
 
@@ -273,6 +274,10 @@ fun MapScreen(viewModel: MapViewModel) {
                         viewModel.updateSettings(editNickname)
                         showProfileScreen = false
                         Toast.makeText(context, "Profile saved", Toast.LENGTH_SHORT).show()
+                    },
+                    onLogout = {
+                        showProfileScreen = false
+                        onLogoutRequested()
                     },
                     onDismiss = { showProfileScreen = false }
                 )
@@ -304,15 +309,6 @@ fun MapScreen(viewModel: MapViewModel) {
                                             .height(240.dp)
                                     )
                                 }
-                                OutlinedTextField(
-                                    value = qrPayload,
-                                    onValueChange = {},
-                                    label = { Text("QR payload") },
-                                    readOnly = true,
-                                    minLines = 3,
-                                    maxLines = 5,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
                             }
                         }
                     },
@@ -349,13 +345,19 @@ fun MapScreen(viewModel: MapViewModel) {
                                         },
                                         leadingContent = { Icon(Icons.Default.Smartphone, null) },
                                         trailingContent = {
-                                            if (isTracked) Icon(Icons.Default.CheckCircle, null, tint = Color.Green)
+                                            if (isTracked) {
+                                                IconButton(onClick = {
+                                                    viewModel.stopTracking(peer.id)
+                                                    Toast.makeText(context, "Tracking stopped", Toast.LENGTH_SHORT).show()
+                                                }) {
+                                                    Icon(Icons.Default.CheckCircle, contentDescription = "Stop tracking", tint = Color.Green)
+                                                }
+                                            }
                                         },
                                         modifier = Modifier.clickable {
                                             if (!isTracked) {
                                                 selectedPeerIdToTrack = peer.id
                                                 pinInput = ""
-                                                qrPayloadInput = ""
                                                 showTrackSelectionDialog = false
                                                 showTrackingAuthDialog = true
                                             } else {
@@ -401,14 +403,6 @@ fun MapScreen(viewModel: MapViewModel) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Scan QR")
                             }
-                            OutlinedTextField(
-                                value = qrPayloadInput,
-                                onValueChange = { qrPayloadInput = it },
-                                label = { Text("QR payload (optional paste)") },
-                                minLines = 2,
-                                maxLines = 4,
-                                modifier = Modifier.fillMaxWidth()
-                            )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = pinInput,
@@ -420,15 +414,6 @@ fun MapScreen(viewModel: MapViewModel) {
                     },
                     confirmButton = {
                         Button(onClick = {
-                            if (qrPayloadInput.isNotBlank()) {
-                                val imported = viewModel.importTrackingInviteFromPayload(qrPayloadInput)
-                                if (imported == null) {
-                                    Toast.makeText(context, "Invalid or expired QR payload", Toast.LENGTH_SHORT).show()
-                                    return@Button
-                                }
-                                selectedPeerIdToTrack = imported.ownerPeerId
-                            }
-
                             val success = viewModel.authorizeTracking(selectedPeerIdToTrack!!, pinInput)
                             if (success) {
                                 Toast.makeText(context, "Tracking Started", Toast.LENGTH_SHORT).show()
@@ -454,6 +439,7 @@ private fun ProfileScreenDialog(
     nickname: String,
     onNicknameChange: (String) -> Unit,
     onSave: () -> Unit,
+    onLogout: () -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -496,6 +482,12 @@ private fun ProfileScreenDialog(
                         Text("Account", style = MaterialTheme.typography.titleMedium)
                         Text("Username: $username", fontWeight = FontWeight.Bold)
                         Text("Email: ${if (email.isBlank()) "Not available" else email}")
+                        TextButton(
+                            onClick = onLogout,
+                            contentPadding = PaddingValues(horizontal = 0.dp)
+                        ) {
+                            Text("Logout")
+                        }
                     }
                 }
 

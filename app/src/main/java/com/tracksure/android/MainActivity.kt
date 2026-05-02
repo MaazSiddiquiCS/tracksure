@@ -25,8 +25,10 @@ import com.tracksure.android.identity.AuthTokenStore
 import com.tracksure.android.identity.BackendDeviceIdentityStore
 import com.tracksure.android.identity.DeviceLinkManager
 import com.tracksure.android.mesh.BluetoothMeshService
+import com.tracksure.android.config.ApiConfig
 import com.tracksure.android.net.AuthApiClient
 import com.tracksure.android.net.DeviceLinkApiClient
+import com.tracksure.android.net.ProfileApiClient
 import com.tracksure.android.services.MeshForegroundService
 import com.tracksure.android.onboarding.BluetoothCheckScreen
 import com.tracksure.android.onboarding.BluetoothStatus
@@ -60,6 +62,23 @@ class MainActivity : ComponentActivity() {
     private lateinit var bluetoothStatusManager: BluetoothStatusManager
     private lateinit var locationStatusManager: LocationStatusManager
     private lateinit var batteryOptimizationManager: BatteryOptimizationManager
+
+    private val authBaseUrl by lazy {
+        ApiConfig.baseUrl(applicationContext)
+    }
+
+    private val authTokenStore by lazy { AuthTokenStore(applicationContext) }
+    private val authSessionManager by lazy { AuthSessionManager(authTokenStore) }
+    private val authApiClient by lazy { AuthApiClient(authBaseUrl) }
+    private val profileApiClient by lazy { ProfileApiClient(authBaseUrl) }
+    private val deviceLinkManager by lazy {
+        val identityStore = BackendDeviceIdentityStore(applicationContext)
+        DeviceLinkManager(
+            context = applicationContext,
+            identityStore = identityStore,
+            deviceLinkApiClient = DeviceLinkApiClient(authBaseUrl)
+        )
+    }
     
     // Core mesh service - managed at app level
     private val mainViewModel: MainViewModel by viewModels()
@@ -67,26 +86,22 @@ class MainActivity : ComponentActivity() {
         object : ViewModelProvider.Factory {
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
-                return MapViewModel(application, BluetoothMeshService.getInstance(application)) as T
+                return MapViewModel(
+                    application,
+                    BluetoothMeshService.getInstance(application),
+                    authTokenStore,
+                    authSessionManager,
+                    authApiClient,
+                    profileApiClient
+                ) as T
             }
         }
     }
     private val authViewModel: AuthViewModel by viewModels {
         object : ViewModelProvider.Factory {
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                val tokenStore = AuthTokenStore(applicationContext)
-                val sessionManager = AuthSessionManager(tokenStore)
-                val baseUrl = getString(R.string.auth_api_base_url).trim().trimEnd('/')
-                Log.i("MainActivity", "Resolved auth_api_base_url=$baseUrl")
-                val apiClient = AuthApiClient(baseUrl)
-                val identityStore = BackendDeviceIdentityStore(applicationContext)
-                val linkManager = DeviceLinkManager(
-                    context = applicationContext,
-                    identityStore = identityStore,
-                    deviceLinkApiClient = DeviceLinkApiClient(baseUrl)
-                )
                 @Suppress("UNCHECKED_CAST")
-                return AuthViewModel(apiClient, sessionManager, linkManager) as T
+                return AuthViewModel(authApiClient, authSessionManager, deviceLinkManager) as T
             }
         }
     }

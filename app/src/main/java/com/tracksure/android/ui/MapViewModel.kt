@@ -12,20 +12,29 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.viewModelScope
 import com.tracksure.android.geohash.LocationChannelManager
+import com.tracksure.android.identity.AuthSessionManager
 import com.tracksure.android.identity.AuthTokenStore
 import com.tracksure.android.mesh.BluetoothMeshDelegate
 import com.tracksure.android.mesh.BluetoothMeshService
 import com.tracksure.android.mesh.PeerInfo
 import com.tracksure.android.model.BitchatMessage
 import com.tracksure.android.model.RoutedPacket
+import com.tracksure.android.net.AuthApiClient
+import com.tracksure.android.net.ProfileApiClient
 import com.tracksure.android.protocol.BitchatPacket
 import com.tracksure.android.services.MeshForegroundService
 import com.tracksure.android.util.NotificationIntervalManager
+import kotlinx.coroutines.launch
 
 class MapViewModel(
     application: Application,
-    val meshService: BluetoothMeshService
+    val meshService: BluetoothMeshService,
+    private val authTokenStore: AuthTokenStore,
+    private val authSessionManager: AuthSessionManager,
+    private val authApiClient: AuthApiClient,
+    private val profileApiClient: ProfileApiClient
 ) : AndroidViewModel(application), BluetoothMeshDelegate {
 
     private val state = MapState()
@@ -33,7 +42,6 @@ class MapViewModel(
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val prefs = application.getSharedPreferences("tracksure_prefs", Context.MODE_PRIVATE)
     private val trackingPrefs = application.getSharedPreferences("tracksure_tracking_prefs", Context.MODE_PRIVATE)
-    private val authTokenStore = AuthTokenStore(application.applicationContext)
 
     companion object {
         private const val KEY_OWNER_INVITE = "owner_tracking_invite"
@@ -49,6 +57,9 @@ class MapViewModel(
 
     private val _accountEmail = MutableLiveData<String>()
     val accountEmail: LiveData<String> = _accountEmail
+
+    private val _profileUiState = MutableLiveData(ProfileUiState())
+    val profileUiState: LiveData<ProfileUiState> = _profileUiState
 
     private val _ownerTrackingInvite = MutableLiveData<TrackingShareInvite?>()
     val ownerTrackingInvite: LiveData<TrackingShareInvite?> = _ownerTrackingInvite
@@ -149,6 +160,149 @@ class MapViewModel(
         val session = authTokenStore.load()
         _accountUsername.value = session?.username?.trim().takeIf { !it.isNullOrBlank() } ?: "Unknown user"
         _accountEmail.value = session?.email?.trim().takeIf { !it.isNullOrBlank() } ?: ""
+    }
+
+    fun updateProfileDraft(
+        fullName: String? = null,
+        phoneNumber: String? = null,
+        bio: String? = null,
+        profilePic: String? = null
+    ) {
+        val current = _profileUiState.value ?: ProfileUiState()
+        _profileUiState.value = current.copy(
+            fullName = fullName ?: current.fullName,
+            phoneNumber = phoneNumber ?: current.phoneNumber,
+            bio = bio ?: current.bio,
+            profilePic = profilePic ?: current.profilePic,
+            error = null
+        )
+    }
+
+    fun loadProfile() {
+        val current = _profileUiState.value ?: ProfileUiState()
+        _profileUiState.value = current.copy(isLoading = true, error = null)
+
+        viewModelScope.launch {
+            when (val result = executeProfileCall { token -> profileApiClient.getMine(token) }) {
+                is ProfileApiClient.Result.Success -> {
+                    val profile = result.value
+                    _profileUiState.value = ProfileUiState(
+                        fullName = profile.fullName.orEmpty(),
+                        phoneNumber = profile.phoneNumber.orEmpty(),
+                        bio = profile.bio.orEmpty(),
+                        profilePic = profile.profilePic,
+                        isLoading = false,
+                        error = null,
+                        hasProfile = true
+                    )
+                }
+
+                is ProfileApiClient.Result.Error -> {
+                    if (result.code == 404) {
+                        _profileUiState.value = ProfileUiState(isLoading = false, hasProfile = false)
+                    } else {
+                        val fallback = _profileUiState.value ?: ProfileUiState()
+                        _profileUiState.value = fallback.copy(isLoading = false, error = result.message)
+                    }
+                }
+            }
+        }
+    }
+
+    fun saveProfile(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val current = _profileUiState.value ?: ProfileUiState()
+        val request = ProfileApiClient.ProfileRequest(
+            fullName = current.fullName.trim().ifBlank { null },
+            phoneNumber = current.phoneNumber.trim().ifBlank { null },
+            bio = current.bio.trim().ifBlank { null },
+            profilePic = current.profilePic?.trim()?.ifBlank { null }
+        )
+
+        _profileUiState.value = current.copy(isLoading = true, error = null)
+
+        viewModelScope.launch {
+            val primaryResult = if (current.hasProfile) {
+                executeProfileCall { token -> profileApiClient.updateMine(token, request) }
+            } else {
+                executeProfileCall { token -> profileApiClient.createMine(token, request) }
+            }
+
+            val finalResult = if (primaryResult is ProfileApiClient.Result.Error && primaryResult.code == 404 && current.hasProfile) {
+                executeProfileCall { token -> profileApiClient.createMine(token, request) }
+            } else {
+                primaryResult
+            }
+
+            when (finalResult) {
+                is ProfileApiClient.Result.Success -> {
+                    val profile = finalResult.value
+                    _profileUiState.value = ProfileUiState(
+                        fullName = profile.fullName.orEmpty(),
+                        phoneNumber = profile.phoneNumber.orEmpty(),
+                        bio = profile.bio.orEmpty(),
+                        profilePic = profile.profilePic,
+                        isLoading = false,
+                        error = null,
+                        hasProfile = true
+                    )
+                    onSuccess()
+                }
+
+                is ProfileApiClient.Result.Error -> {
+                    val fallback = _profileUiState.value ?: ProfileUiState()
+                    _profileUiState.value = fallback.copy(isLoading = false, error = finalResult.message)
+                    onError(finalResult.message)
+                }
+            }
+        }
+    }
+
+    private suspend fun <T> executeProfileCall(
+        action: suspend (String) -> ProfileApiClient.Result<T>
+    ): ProfileApiClient.Result<T> {
+        val session = authTokenStore.load()
+            ?: return ProfileApiClient.Result.Error("Sign in required", 401)
+
+        val result = action(session.accessToken)
+        if (result is ProfileApiClient.Result.Error && (result.code == 401 || result.code == 403)) {
+            when (val refresh = authApiClient.refresh(session.refreshToken)) {
+                is AuthApiClient.Result.Success -> {
+                    val updatedSession = toSession(refresh.value)
+                    authSessionManager.setAuthenticated(updatedSession)
+                    val retry = action(updatedSession.accessToken)
+                    if (retry is ProfileApiClient.Result.Error && (retry.code == 401 || retry.code == 403)) {
+                        authSessionManager.clear()
+                        return ProfileApiClient.Result.Error("Session expired. Please sign in again.", retry.code)
+                    }
+                    return retry
+                }
+
+                is AuthApiClient.Result.Error -> {
+                    val authExpired = refresh.code == 401 || refresh.code == 403
+                    if (authExpired) {
+                        authSessionManager.clear()
+                    }
+                    val message = if (authExpired) {
+                        "Session expired. Please sign in again."
+                    } else {
+                        refresh.message
+                    }
+                    return ProfileApiClient.Result.Error(message, refresh.code, refresh.retryable)
+                }
+            }
+        }
+
+        return result
+    }
+
+    private fun toSession(response: AuthApiClient.LoginResponse): AuthTokenStore.Session {
+        return AuthTokenStore.Session(
+            accessToken = response.accessToken,
+            refreshToken = response.refreshToken,
+            userId = response.userId,
+            username = response.username,
+            email = response.email
+        )
     }
 
     fun createOrRotateOwnerTrackingInvite(): TrackingShareInvite {
@@ -369,3 +523,13 @@ class MapViewModel(
         return Regex("^(?i)(peer|device)\\s+[0-9a-f]{4,16}$").matches(normalized)
     }
 }
+
+data class ProfileUiState(
+    val fullName: String = "",
+    val phoneNumber: String = "",
+    val bio: String = "",
+    val profilePic: String? = null,
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val hasProfile: Boolean = false
+)

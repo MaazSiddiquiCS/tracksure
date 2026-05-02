@@ -4,7 +4,7 @@ package com.tracksure.android.bridgeupload
  * Runtime config for sidecar bridge uploads.
  */
 data class BridgeUploadConfig(
-    val endpointUrl: String = "http://13.50.248.167:8080/v1/locations:batch",
+    val endpointUrl: String = "",
     val uploaderDeviceId: Long,
     val maxBatchSizeDefault: Int = 100,
     val minPointsToUpload: Int = 5,

@@ -3,6 +3,7 @@ package com.tracksure.android.bridgeupload
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
+import com.tracksure.android.config.ApiConfig
 import com.tracksure.android.identity.BackendDeviceIdentityStore
 
 /**
@@ -44,7 +45,8 @@ object BridgeUploadRuntime {
             return
         }
 
-        val endpointUrl = readStringMeta(appContext, meta, META_ENDPOINT).orEmpty().trim()
+        val endpointRaw = readStringMeta(appContext, meta, META_ENDPOINT).orEmpty().trim()
+        val endpointUrl = ApiConfig.resolveBridgeUploadEndpoint(endpointRaw)
         if (endpointUrl.isBlank()) {
             Log.w(TAG, "Bridge runtime disabled: missing $META_ENDPOINT")
             return

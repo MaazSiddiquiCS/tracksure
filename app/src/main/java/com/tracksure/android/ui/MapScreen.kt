@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -62,6 +64,7 @@ fun MapScreen(
     val myNickname by viewModel.myNickname.observeAsState("")
     val accountUsername by viewModel.accountUsername.observeAsState("Unknown user")
     val accountEmail by viewModel.accountEmail.observeAsState("")
+    val profileUiState by viewModel.profileUiState.observeAsState(ProfileUiState())
     val ownerInvite by viewModel.ownerTrackingInvite.observeAsState()
     val importedInvite by viewModel.importedTrackingInvite.observeAsState()
 
@@ -125,6 +128,7 @@ fun MapScreen(
                 FloatingActionButton(
                     onClick = {
                         viewModel.refreshAccountProfile()
+                        viewModel.loadProfile()
                         editNickname = myNickname
                         showProfileScreen = true
                     },
@@ -270,10 +274,25 @@ fun MapScreen(
                     email = accountEmail,
                     nickname = editNickname,
                     onNicknameChange = { editNickname = it },
+                    fullName = profileUiState.fullName,
+                    phoneNumber = profileUiState.phoneNumber,
+                    bio = profileUiState.bio,
+                    isLoading = profileUiState.isLoading,
+                    errorMessage = profileUiState.error,
+                    onFullNameChange = { viewModel.updateProfileDraft(fullName = it) },
+                    onPhoneNumberChange = { viewModel.updateProfileDraft(phoneNumber = it) },
+                    onBioChange = { viewModel.updateProfileDraft(bio = it) },
                     onSave = {
                         viewModel.updateSettings(editNickname)
-                        showProfileScreen = false
-                        Toast.makeText(context, "Profile saved", Toast.LENGTH_SHORT).show()
+                        viewModel.saveProfile(
+                            onSuccess = {
+                                showProfileScreen = false
+                                Toast.makeText(context, "Profile saved", Toast.LENGTH_SHORT).show()
+                            },
+                            onError = { message ->
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            }
+                        )
                     },
                     onLogout = {
                         showProfileScreen = false
@@ -438,6 +457,14 @@ private fun ProfileScreenDialog(
     email: String,
     nickname: String,
     onNicknameChange: (String) -> Unit,
+    fullName: String,
+    phoneNumber: String,
+    bio: String,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onFullNameChange: (String) -> Unit,
+    onPhoneNumberChange: (String) -> Unit,
+    onBioChange: (String) -> Unit,
     onSave: () -> Unit,
     onLogout: () -> Unit,
     onDismiss: () -> Unit
@@ -498,17 +525,53 @@ private fun ProfileScreenDialog(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("Profile Settings", style = MaterialTheme.typography.titleMedium)
+                        Text("Profile", style = MaterialTheme.typography.titleMedium)
+                        if (isLoading) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        OutlinedTextField(
+                            value = fullName,
+                            onValueChange = onFullNameChange,
+                            label = { Text("Full name") },
+                            singleLine = true,
+                            enabled = !isLoading,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = phoneNumber,
+                            onValueChange = onPhoneNumberChange,
+                            label = { Text("Phone number") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            singleLine = true,
+                            enabled = !isLoading,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = bio,
+                            onValueChange = onBioChange,
+                            label = { Text("Bio") },
+                            enabled = !isLoading,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 4
+                        )
                         OutlinedTextField(
                             value = nickname,
                             onValueChange = onNicknameChange,
                             label = { Text("Nickname") },
                             supportingText = { Text("Default is your device name. You can change it anytime.") },
                             singleLine = true,
+                            enabled = !isLoading,
                             modifier = Modifier.fillMaxWidth()
                         )
                         HorizontalDivider()
-                        Text("More settings (static preview)", style = MaterialTheme.typography.bodyMedium)
+                        errorMessage?.let { message ->
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Text("More settings", style = MaterialTheme.typography.bodyMedium)
                         ListItem(
                             headlineContent = { Text("Profile photo") },
                             supportingContent = { Text("Coming soon") },
@@ -539,7 +602,8 @@ private fun ProfileScreenDialog(
                     }
                     Button(
                         onClick = onSave,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading
                     ) {
                         Text("Save")
                     }

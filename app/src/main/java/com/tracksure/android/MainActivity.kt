@@ -54,7 +54,7 @@ import com.tracksure.android.ui.theme.BitchatTheme
 import com.tracksure.android.nostr.PoWPreferenceManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
+import androidx.lifecycle.compose.LocalLifecycleOwner
 class MainActivity : ComponentActivity() {
     
     private lateinit var permissionManager: PermissionManager
@@ -759,6 +759,8 @@ class MainActivity : ComponentActivity() {
             // Set app foreground state
             //meshService.connectionManager.setAppBackgroundState(false)
             mapViewModel.setAppBackgroundState(false)
+
+
 
             // Check if Bluetooth was disabled while app was backgrounded
             val currentBluetoothStatus = bluetoothStatusManager.checkBluetoothStatus()

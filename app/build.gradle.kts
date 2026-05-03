@@ -92,6 +92,9 @@ dependencies {
     
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+
+    // WorkManager for deferred device-link sync
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
     
     // Bluetooth
     implementation(libs.nordic.ble)

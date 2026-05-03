@@ -31,6 +31,12 @@ class DeviceLinkManager(
             retryable = true
         )
 
+        // If we already have a valid backendDeviceId, don't call linkDevice again!
+        if (existing != null && existing.backendDeviceId != null && existing.backendDeviceId > 0) {
+            Log.d(TAG, "Already linked with backendDeviceId=${existing.backendDeviceId} peerId=$meshPeerId")
+            return LinkStatus.Linked(existing)
+        }
+
         if (existing != null) {
             Log.d(TAG, "Refreshing linked device backendDeviceId=${existing.backendDeviceId} peerId=$meshPeerId")
         } else {
@@ -42,7 +48,7 @@ class DeviceLinkManager(
             is DeviceLinkApiClient.Result.Success -> {
                 val identity = BackendDeviceIdentity(
                     backendDeviceId = result.value.deviceId,
-                    meshPeerId = result.value.peerId.trim().lowercase().ifBlank { meshPeerId }
+                    meshPeerId = result.value.peerId?.trim()?.lowercase()?.ifBlank { meshPeerId } ?: meshPeerId
                 )
                 identityStore.save(identity)
                 BridgeUploadRuntime.restartWithLatestIdentity(context.applicationContext)

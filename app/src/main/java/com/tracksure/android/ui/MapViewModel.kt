@@ -12,10 +12,13 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
 import com.tracksure.android.geohash.LocationChannelManager
 import com.tracksure.android.identity.AuthSessionManager
 import com.tracksure.android.identity.AuthTokenStore
+import com.tracksure.android.identity.DeviceLinkRepository
+import com.tracksure.android.identity.LinkedTrackingDevice
 import com.tracksure.android.mesh.BluetoothMeshDelegate
 import com.tracksure.android.mesh.BluetoothMeshService
 import com.tracksure.android.mesh.PeerInfo
@@ -37,16 +40,18 @@ class MapViewModel(
     private val profileApiClient: ProfileApiClient
 ) : AndroidViewModel(application), BluetoothMeshDelegate {
 
+    companion object {
+        private const val TAG = "MapViewModel"
+        private const val KEY_OWNER_INVITE = "owner_tracking_invite"
+        private const val KEY_IMPORTED_INVITE = "imported_tracking_invite"
+    }
+
     private val state = MapState()
     private val locationChannelManager = LocationChannelManager.getInstance(application)
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val prefs = application.getSharedPreferences("tracksure_prefs", Context.MODE_PRIVATE)
     private val trackingPrefs = application.getSharedPreferences("tracksure_tracking_prefs", Context.MODE_PRIVATE)
-
-    companion object {
-        private const val KEY_OWNER_INVITE = "owner_tracking_invite"
-        private const val KEY_IMPORTED_INVITE = "imported_tracking_invite"
-    }
+    private val deviceLinkRepository = DeviceLinkRepository(application)
 
     // --- Settings Data ---
     private val _myNickname = MutableLiveData<String>()
@@ -66,6 +71,11 @@ class MapViewModel(
 
     private val _importedTrackingInvite = MutableLiveData<TrackingShareInvite?>()
     val importedTrackingInvite: LiveData<TrackingShareInvite?> = _importedTrackingInvite
+
+    private val _pendingTrackingInvites = MutableLiveData<List<TrackingShareInvite>>(emptyList())
+    val pendingTrackingInvites: LiveData<List<TrackingShareInvite>> = _pendingTrackingInvites
+
+    val linkedDevices: LiveData<List<LinkedTrackingDevice>> = deviceLinkRepository.linkedDevices.asLiveData()
 
     // --- Authorized Peers (Unlocked via Code) ---
     private val _authorizedPeers = MutableLiveData<Set<String>>(emptySet())
@@ -126,6 +136,8 @@ class MapViewModel(
         }
         _ownerTrackingInvite.value = loadInvite(KEY_OWNER_INVITE)
         _importedTrackingInvite.value = loadInvite(KEY_IMPORTED_INVITE)
+        _authorizedPeers.value = linkedDevices.value.orEmpty().filter { it.isActive }.map { it.peerId }.toSet()
+        refreshTrackedDevicesFromBackend()
 
         meshService.delegate = this
 
@@ -319,12 +331,18 @@ class MapViewModel(
         val invite = TrackingShareInvite.fromPayload(payload.trim()) ?: return null
         if (invite.isExpired()) return null
         _importedTrackingInvite.value = invite
+        val currentPending = _pendingTrackingInvites.value.orEmpty().toMutableList()
+        currentPending.removeAll { it.inviteId == invite.inviteId }
+        currentPending.add(invite)
+        _pendingTrackingInvites.value = currentPending
         saveInvite(KEY_IMPORTED_INVITE, invite)
         return invite
     }
 
     fun authorizeTracking(peerId: String, inputCode: String): Boolean {
-        val invite = _importedTrackingInvite.value ?: return false
+        val invite = _importedTrackingInvite.value ?: _pendingTrackingInvites.value.orEmpty().lastOrNull { candidate ->
+            candidate.ownerPeerId.trim().equals(peerId.trim(), ignoreCase = true)
+        } ?: return false
         if (invite.isExpired()) return false
         if (!invite.ownerPeerId.trim().equals(peerId.trim(), ignoreCase = true)) return false
 
@@ -336,6 +354,10 @@ class MapViewModel(
         currentSet.add(peerId)
         _authorizedPeers.value = currentSet
 
+        deviceLinkRepository.registerVerifiedInvite(invite)
+        removePendingInvite(invite.inviteId)
+        saveLinkedDeviceActiveState(peerId, true)
+
         if (invite.oneTimeUse) {
             clearImportedInvite()
         }
@@ -344,15 +366,141 @@ class MapViewModel(
     }
 
     fun stopTracking(peerId: String) {
+        saveLinkedDeviceActiveState(peerId, false)
         val currentSet = _authorizedPeers.value.orEmpty().toMutableSet()
         if (currentSet.remove(peerId)) {
             _authorizedPeers.value = currentSet
         }
     }
 
+    fun startTracking(peerId: String): Boolean {
+        val updated = deviceLinkRepository.startTracking(peerId) ?: return false
+        val currentSet = _authorizedPeers.value.orEmpty().toMutableSet()
+        currentSet.add(updated.peerId)
+        _authorizedPeers.value = currentSet
+        return true
+    }
+
+    fun setTrackingActive(peerId: String, active: Boolean): Boolean {
+        return if (active) startTracking(peerId) else {
+            stopTracking(peerId)
+            true
+        }
+    }
+
+    fun unlinkDevice(peerId: String, onResult: (success: Boolean, message: String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            val session = authTokenStore.load()
+            if (session == null) {
+                onResult(false, "Sign in required")
+                return@launch
+            }
+
+            val device = linkedDevices.value.orEmpty().find { it.peerId == peerId }
+            if (device == null) {
+                onResult(false, "Device not found locally")
+                return@launch
+            }
+
+            val linkId = device.backendLinkId
+
+            if (linkId == null) {
+                deviceLinkRepository.removeLinkedDevice(peerId)
+                stopTracking(peerId)
+                Log.i(TAG, "Local-only device unlinked: $peerId")
+                onResult(true, "Device unlinked")
+                return@launch
+            }
+
+            val peerIdsForSameLink = linkedDevices.value.orEmpty()
+                .filter { it.backendLinkId == linkId || it.peerId == peerId }
+                .map { it.peerId }
+                .distinct()
+
+            when (val result = deviceLinkRepository.deleteLink(session.accessToken, linkId)) {
+                is com.tracksure.android.net.DeviceLinkApiClient.Result.Success -> {
+                    deviceLinkRepository.removeLinkedDevice(peerId, linkId)
+                    peerIdsForSameLink.forEach { candidate -> stopTracking(candidate) }
+                    Log.i(TAG, "Device unlinked from backend and local: $peerId linkId=$linkId")
+                    onResult(true, "Device unlinked")
+                }
+                is com.tracksure.android.net.DeviceLinkApiClient.Result.Error -> {
+                    val notFound = result.code == 404 || result.message.contains("not found", ignoreCase = true)
+                    if (!notFound) {
+                        Log.w(TAG, "Failed to unlink device: ${result.message}")
+                        onResult(false, result.message)
+                        return@launch
+                    }
+
+                    // Stale local id (historical bug): resolve link by peer and retry once.
+                    when (val resolve = deviceLinkRepository.resolveBackendLinkIdByPeer(session.accessToken, peerId)) {
+                        is com.tracksure.android.net.DeviceLinkApiClient.Result.Success -> {
+                            val resolvedLinkId = resolve.value
+                            if (resolvedLinkId == null) {
+                                // Already absent on backend: clear local state.
+                                deviceLinkRepository.removeLinkedDevice(peerId, linkId)
+                                peerIdsForSameLink.forEach { candidate -> stopTracking(candidate) }
+                                Log.i(TAG, "Unlink treated as already removed on backend for peerId=$peerId")
+                                onResult(true, "Device unlinked")
+                                return@launch
+                            }
+
+                            when (val retry = deviceLinkRepository.deleteLink(session.accessToken, resolvedLinkId)) {
+                                is com.tracksure.android.net.DeviceLinkApiClient.Result.Success -> {
+                                    deviceLinkRepository.removeLinkedDevice(peerId, resolvedLinkId)
+                                    peerIdsForSameLink.forEach { candidate -> stopTracking(candidate) }
+                                    Log.i(TAG, "Device unlinked after resolving linkId: $peerId linkId=$resolvedLinkId")
+                                    onResult(true, "Device unlinked")
+                                }
+
+                                is com.tracksure.android.net.DeviceLinkApiClient.Result.Error -> {
+                                    Log.w(TAG, "Failed to unlink device after resolving linkId: ${retry.message}")
+                                    onResult(false, retry.message)
+                                }
+                            }
+                        }
+
+                        is com.tracksure.android.net.DeviceLinkApiClient.Result.Error -> {
+                            Log.w(TAG, "Failed to resolve linkId for unlink: ${resolve.message}")
+                            onResult(false, resolve.message)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun refreshTrackedDevicesFromBackend() {
+        viewModelScope.launch {
+            val session = authTokenStore.load() ?: return@launch
+            when (val result = deviceLinkRepository.syncWithBackend(session.accessToken)) {
+                is com.tracksure.android.net.DeviceLinkApiClient.Result.Success -> Unit
+                is com.tracksure.android.net.DeviceLinkApiClient.Result.Error -> {
+                    Log.w(TAG, "Tracked device sync deferred code=${result.code} retryable=${result.retryable} msg=${result.message}")
+                    if (result.retryable) {
+                        deviceLinkRepository.enqueueBackgroundSync()
+                    }
+                }
+            }
+        }
+    }
+
     private fun clearImportedInvite() {
         _importedTrackingInvite.value = null
         trackingPrefs.edit().remove(KEY_IMPORTED_INVITE).apply()
+    }
+
+    private fun removePendingInvite(inviteId: String) {
+        val remaining = _pendingTrackingInvites.value.orEmpty().filterNot { it.inviteId == inviteId }
+        _pendingTrackingInvites.value = remaining
+    }
+
+    private fun saveLinkedDeviceActiveState(peerId: String, active: Boolean) {
+        if (active) {
+            deviceLinkRepository.startTracking(peerId)
+        } else {
+            deviceLinkRepository.stopTracking(peerId)
+        }
     }
 
     private fun saveInvite(key: String, invite: TrackingShareInvite) {
@@ -522,6 +670,7 @@ class MapViewModel(
         val normalized = this.trim()
         return Regex("^(?i)(peer|device)\\s+[0-9a-f]{4,16}$").matches(normalized)
     }
+
 }
 
 data class ProfileUiState(

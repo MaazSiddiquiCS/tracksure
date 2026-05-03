@@ -67,6 +67,16 @@ fun MapScreen(
     val profileUiState by viewModel.profileUiState.observeAsState(ProfileUiState())
     val ownerInvite by viewModel.ownerTrackingInvite.observeAsState()
     val importedInvite by viewModel.importedTrackingInvite.observeAsState()
+    val pendingTrackingInvites by viewModel.pendingTrackingInvites.observeAsState(emptyList())
+    val linkedDevices by viewModel.linkedDevices.observeAsState(emptyList())
+    val linkedPeerIds = remember(linkedDevices) {
+        linkedDevices.map { it.peerId.trim().lowercase() }.toSet()
+    }
+    val availableOnlinePeers = remember(peerLocations, linkedPeerIds) {
+        peerLocations.entries
+            .filter { (peerId, _) -> peerId.trim().lowercase() !in linkedPeerIds }
+            .sortedBy { (_, info) -> info.nickname?.trim().orEmpty().ifBlank { "zzzz" } }
+    }
 
     // Map State View
     var hasCenteredOnce by remember { mutableStateOf(false) }
@@ -96,6 +106,8 @@ fun MapScreen(
         }
         selectedPeerIdToTrack = imported.ownerPeerId
         pinInput = imported.password
+        showTrackSelectionDialog = false
+        showTrackingAuthDialog = true
         Toast.makeText(context, "Invite imported for ${imported.ownerNickname}", Toast.LENGTH_SHORT).show()
     }
 
@@ -348,42 +360,155 @@ fun MapScreen(
                     onDismissRequest = { showTrackSelectionDialog = false },
                     title = { Text("Select Device to Track", fontFamily = FontFamily.Monospace) },
                     text = {
-                        if (peerLocations.isEmpty()) {
-                            Text("No devices found nearby.")
-                        } else {
-                            LazyColumn {
-                                items(peerLocations.values.toList()) { peer ->
-                                    val isTracked = authorizedPeers.contains(peer.id)
-                                    val displayName = viewModel.getDisplayNameForPeer(peer.id, peer.nickname)
-                                    ListItem(
-                                        headlineContent = { Text(displayName, fontWeight = FontWeight.Bold) },
-                                        supportingContent = {
-                                            Text(
-                                                if (isTracked) "Live tracking enabled" else "Tap to start tracking"
-                                            )
-                                        },
-                                        leadingContent = { Icon(Icons.Default.Smartphone, null) },
-                                        trailingContent = {
-                                            if (isTracked) {
-                                                IconButton(onClick = {
-                                                    viewModel.stopTracking(peer.id)
-                                                    Toast.makeText(context, "Tracking stopped", Toast.LENGTH_SHORT).show()
-                                                }) {
-                                                    Icon(Icons.Default.CheckCircle, contentDescription = "Stop tracking", tint = Color.Green)
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.clickable {
-                                            if (!isTracked) {
-                                                selectedPeerIdToTrack = peer.id
-                                                pinInput = ""
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Button(onClick = {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                    val options = ScanOptions()
+                                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                        .setPrompt("Scan tracking invite QR")
+                                        .setBeepEnabled(true)
+                                        .setOrientationLocked(true)
+                                    scanLauncher.launch(options)
+                                } else {
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
+                            }) {
+                                Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Scan QR")
+                            }
+
+                            Text("Available Online Devices", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            if (availableOnlinePeers.isEmpty()) {
+                                Text("No new online peers in range right now.", fontSize = 12.sp)
+                            } else {
+                                availableOnlinePeers.forEach { (peerId, info) ->
+                                    val displayName = info.nickname?.trim().takeUnless { it.isNullOrBlank() }
+                                        ?: "Device ${peerId.take(8)}"
+
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedPeerIdToTrack = peerId
                                                 showTrackSelectionDialog = false
                                                 showTrackingAuthDialog = true
-                                            } else {
-                                                Toast.makeText(context, "Already tracking", Toast.LENGTH_SHORT).show()
+                                            },
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.BluetoothSearching, contentDescription = null)
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(displayName, fontWeight = FontWeight.SemiBold)
+                                                Text(
+                                                    "Peer ${peerId.take(8)}... · tap to verify",
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
                                             }
                                         }
-                                    )
+                                    }
+                                }
+                            }
+
+                            Text("Linked Devices", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            if (linkedDevices.isEmpty()) {
+                                Text("Linked devices saved locally or synced from the backend will appear here.", fontSize = 12.sp)
+                            } else {
+                                linkedDevices.forEach { device ->
+                                    val trackingLabel = device.title()
+
+                                    var showDeviceMenu by remember { mutableStateOf(false) }
+
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Default.Smartphone, null)
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(trackingLabel, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                                FilledTonalIconButton(
+                                                    onClick = {
+                                                        val enabled = !device.isActive
+                                                        if (viewModel.setTrackingActive(device.peerId, enabled)) {
+                                                            Toast.makeText(
+                                                                context,
+                                                                if (enabled) "Tracking started" else "Tracking stopped",
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(36.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (device.isActive) Icons.Default.StopCircle else Icons.Default.PlayCircle,
+                                                        contentDescription = null
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.width(6.dp))
+
+                                                IconButton(
+                                                    onClick = {
+                                                        showDeviceMenu = true
+                                                    },
+                                                    modifier = Modifier.size(36.dp)
+                                                ) {
+                                                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                                                }
+
+                                                DropdownMenu(
+                                                    expanded = showDeviceMenu,
+                                                    onDismissRequest = { showDeviceMenu = false }
+                                                ) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Unlink") },
+                                                        onClick = {
+                                                            showDeviceMenu = false
+                                                            viewModel.unlinkDevice(device.peerId) { success, message ->
+                                                                Toast.makeText(
+                                                                    context,
+                                                                    if (success) "Device unlinked" else "Unlink failed: $message",
+                                                                    if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
+                                                                ).show()
+                                                            }
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Default.LinkOff, null) }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                     HorizontalDivider()
                                 }
                             }

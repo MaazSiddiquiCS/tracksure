@@ -45,6 +45,7 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import com.tracksure.android.R
 
 @Composable
 fun MapScreen(
@@ -214,7 +215,7 @@ fun MapScreen(
                         myMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                         myMarker.title = "Me"
 
-                        val icon = ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.person)
+                        val icon = ContextCompat.getDrawable(context, R.drawable.ic_marker_my)
                         if (icon != null) myMarker.icon = icon
 
                         mapView.overlays.add(myMarker)
@@ -236,7 +237,7 @@ fun MapScreen(
                             marker.title = info.nickname
                             marker.snippet = "Live Tracking Active"
 
-                            val peerIcon = ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.marker_default)
+                            val peerIcon = ContextCompat.getDrawable(context, R.drawable.ic_marker_peer)
                             if (peerIcon != null) marker.icon = peerIcon
 
                             mapView.overlays.add(marker)

@@ -46,6 +46,7 @@ import com.tracksure.android.onboarding.OnboardingCoordinator
 import com.tracksure.android.onboarding.OnboardingState
 import com.tracksure.android.onboarding.PermissionExplanationScreen
 import com.tracksure.android.onboarding.PermissionManager
+import com.tracksure.android.onboarding.WelcomeScreen
 import com.tracksure.android.ui.MapScreen
 import com.tracksure.android.ui.MapViewModel
 import com.tracksure.android.ui.auth.AuthGateScreen
@@ -55,6 +56,16 @@ import com.tracksure.android.nostr.PoWPreferenceManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.work.Data
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
+import androidx.work.WorkManager
+import android.location.LocationManager
+import android.Manifest
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 class MainActivity : ComponentActivity() {
     
     private lateinit var permissionManager: PermissionManager
@@ -246,6 +257,14 @@ class MainActivity : ComponentActivity() {
         }
 
         when (onboardingState) {
+            OnboardingState.WELCOME -> {
+                WelcomeScreen(
+                    modifier = modifier,
+                    onContinue = {
+                        proceedWithPermissionCheck()
+                    }
+                )
+            }
             OnboardingState.PERMISSION_REQUESTING -> {
                 InitializingScreen(modifier)
             }
@@ -365,11 +384,63 @@ class MainActivity : ComponentActivity() {
             OnboardingState.COMPLETE -> {
                 // App is fully initialized, mesh service is running
                 android.util.Log.d("MainActivity", "Onboarding completed - app ready")
+                scheduleTilePrefetch()
             }
             OnboardingState.ERROR -> {
                 android.util.Log.e("MainActivity", "Onboarding error state reached")
             }
             else -> {}
+        }
+    }
+
+    private fun scheduleTilePrefetch() {
+        try {
+            // Don't schedule repeatedly - use unique work with KEEP
+            val loc = mapViewModel.myLocation.value
+
+            var centerLat: Double? = loc?.latitude
+            var centerLon: Double? = loc?.longitude
+
+            if (centerLat == null || centerLon == null) {
+                // Fallback to system last known location
+                val lm = getSystemService(LOCATION_SERVICE) as LocationManager
+                val providers = lm.getProviders(true)
+                var last: android.location.Location? = null
+                for (p in providers) {
+                    try {
+                        val l = lm.getLastKnownLocation(p)
+                        if (l != null && (last == null || l.time > last.time)) last = l
+                    } catch (e: SecurityException) { /* permission missing */ }
+                }
+                if (last != null) {
+                    centerLat = last.latitude
+                    centerLon = last.longitude
+                }
+            }
+
+            if (centerLat == null || centerLon == null) return
+
+            val data = Data.Builder()
+                .putDouble("center_lat", centerLat)
+                .putDouble("center_lon", centerLon)
+                .putDouble("radius_km", 10.0)
+                .putInt("min_zoom", 12)
+                .putInt("max_zoom", 16)
+                .build()
+
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.UNMETERED)
+                .build()
+
+            val req = OneTimeWorkRequestBuilder<com.tracksure.android.background.TilePrefetchWorker>()
+                .setInputData(data)
+                .setConstraints(constraints)
+                .build()
+
+            WorkManager.getInstance(this)
+                .enqueueUniqueWork("tile_prefetch", ExistingWorkPolicy.KEEP, req)
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Failed to schedule tile prefetch: ${e.message}")
         }
     }
     
@@ -379,6 +450,12 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             // Small delay to show the checking state
             delay(500)
+
+            if (permissionManager.isFirstTimeLaunch()) {
+                Log.d("MainActivity", "First-time launch, showing welcome screen")
+                mainViewModel.updateOnboardingState(OnboardingState.WELCOME)
+                return@launch
+            }
             
             // First check Bluetooth status (always required)
             checkBluetoothAndProceed()
@@ -566,10 +643,6 @@ class MainActivity : ComponentActivity() {
         }
         else{
             startService(serviceIntent)
-        }
-        lifecycleScope.launch {
-            delay(500) // Small delay for smooth transition
-            mainViewModel.updateOnboardingState(OnboardingState.COMPLETE)
         }
 
         // After permissions are granted, re-check Bluetooth, Location, and Battery Optimization status

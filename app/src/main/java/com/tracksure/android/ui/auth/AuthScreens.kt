@@ -73,21 +73,28 @@ fun AuthGateScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp),
             colors = CardDefaults.cardColors(
-                containerColor = colorScheme.surface.copy(alpha = 0.9f)
+                containerColor = colorScheme.surface.copy(alpha = 0.95f)
             ),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(20.dp)
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_banner),
-                contentDescription = "TrackSure logo",
-                contentScale = ContentScale.Fit,
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(84.dp)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-            )
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_channel_foreground),
+                    contentDescription = "TrackSure Bluetooth shield",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(120.dp)
+                )
+            }
         }
 
         Text(

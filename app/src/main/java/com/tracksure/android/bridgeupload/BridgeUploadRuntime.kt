@@ -13,7 +13,6 @@ object BridgeUploadRuntime {
     private const val TAG = "BridgeUpload"
     private const val META_ENABLED = "com.tracksure.android.bridgeupload.ENABLED"
     private const val META_ENDPOINT = "com.tracksure.android.bridgeupload.ENDPOINT_URL"
-    private const val META_UPLOADER_ID = "com.tracksure.android.bridgeupload.UPLOADER_DEVICE_ID"
     private const val META_REQUIRE_WIFI = "com.tracksure.android.bridgeupload.REQUIRE_WIFI"
     private const val META_REQUIRE_VALIDATED = "com.tracksure.android.bridgeupload.REQUIRE_VALIDATED"
 
@@ -53,10 +52,9 @@ object BridgeUploadRuntime {
         }
 
         val persistedIdentity = BackendDeviceIdentityStore(appContext).load()
-        val uploaderRaw = readStringMeta(appContext, meta, META_UPLOADER_ID).orEmpty().trim()
-        val uploaderDeviceId = persistedIdentity?.backendDeviceId ?: readLongMeta(appContext, meta, META_UPLOADER_ID)
+        val uploaderDeviceId = persistedIdentity?.backendDeviceId
         if (uploaderDeviceId == null) {
-            Log.w(TAG, "Bridge runtime disabled: invalid/missing $META_UPLOADER_ID='$uploaderRaw'")
+            Log.w(TAG, "Bridge runtime disabled: missing backend device identity")
             return
         }
 
@@ -109,22 +107,6 @@ object BridgeUploadRuntime {
         }
     }
 
-    private fun readLongMeta(context: Context, meta: android.os.Bundle, key: String): Long? {
-        val raw = meta.get(key) ?: return null
-        return when (raw) {
-            is Number -> {
-                val asInt = raw.toInt()
-                val fromRes = try {
-                    context.getString(asInt).trim().toLongOrNull()
-                } catch (_: Exception) {
-                    null
-                }
-                fromRes ?: raw.toLong()
-            }
-            is String -> raw.trim().toLongOrNull()
-            else -> raw.toString().trim().toLongOrNull()
-        }
-    }
 }
 
 

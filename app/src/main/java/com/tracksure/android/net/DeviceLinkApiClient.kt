@@ -20,6 +20,11 @@ class DeviceLinkApiClient(
         val detail: String? = null
     )
 
+    data class DeviceLinkUpsertRequest(
+        @SerializedName("peerId") val peerId: String? = null,
+        @SerializedName("deviceName") val deviceName: String? = null
+    )
+
     data class DeviceLinkCreateRequest(
         @SerializedName("peerId") val peerId: String? = null,
         @SerializedName("targetDeviceId") val targetDeviceId: Long? = null,
@@ -30,6 +35,12 @@ class DeviceLinkApiClient(
     data class LinkResult(
         val deviceId: Long,
         val peerId: String
+    )
+
+    data class DeviceLinkUpsertResponse(
+        @SerializedName("deviceId") val deviceId: Long? = null,
+        @SerializedName("peerId") val peerId: String? = null,
+        @SerializedName("deviceName") val deviceName: String? = null
     )
 
     data class TrackedDeviceLinkResponse(
@@ -61,16 +72,15 @@ class DeviceLinkApiClient(
     }
 
     suspend fun linkDevice(accessToken: String, peerId: String, deviceName: String?): Result<LinkResult> = withContext(Dispatchers.IO) {
-        val request = DeviceLinkCreateRequest(
+        val request = DeviceLinkUpsertRequest(
             peerId = peerId,
-            deviceName = deviceName,
-            permissionType = "TRACK"
+            deviceName = deviceName
         )
 
-        return@withContext when (val result = createLink(accessToken, request)) {
+        return@withContext when (val result = linkDeviceToAccount(accessToken, request)) {
             is Result.Success -> {
                 val value = result.value
-                val resolvedDeviceId = value.deviceId ?: value.linkId
+                val resolvedDeviceId = value.deviceId
                 if (resolvedDeviceId == null || resolvedDeviceId <= 0L) {
                     Result.Error("Invalid device link response")
                 } else {
@@ -84,6 +94,40 @@ class DeviceLinkApiClient(
             }
 
             is Result.Error -> result
+        }
+    }
+
+    private suspend fun linkDeviceToAccount(
+        accessToken: String,
+        request: DeviceLinkUpsertRequest
+    ): Result<DeviceLinkUpsertResponse> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val endpoint = url("/api/device/link")
+            val req = Request.Builder()
+                .url(endpoint)
+                .header("Authorization", "Bearer $accessToken")
+                .post(gson.toJson(request).toRequestBody("application/json".toMediaType()))
+                .build()
+
+            OkHttpProvider.httpClientForUrl(endpoint).newCall(req).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return@use Result.Error(
+                        extractErrorMessage(body, "Device link failed"),
+                        response.code,
+                        response.code in 500..599 || response.code == 429
+                    )
+                }
+
+                val parsed = gson.fromJson(body, DeviceLinkUpsertResponse::class.java)
+                if (parsed?.deviceId == null || parsed.deviceId <= 0L) {
+                    Result.Error("Invalid device link response", response.code)
+                } else {
+                    Result.Success(parsed)
+                }
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Device link failed", retryable = true)
         }
     }
 

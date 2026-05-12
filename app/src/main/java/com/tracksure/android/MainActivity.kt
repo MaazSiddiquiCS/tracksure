@@ -578,6 +578,7 @@ class MainActivity : ComponentActivity() {
         Log.d("MainActivity", "Location services enabled by user")
         mainViewModel.updateLocationLoading(false)
         mainViewModel.updateLocationStatus(LocationStatus.ENABLED)
+        mapViewModel.ensureLocationUpdates()
         checkBatteryOptimizationAndProceed()
     }
 
@@ -784,6 +785,7 @@ class MainActivity : ComponentActivity() {
                 delay(1000) // Give the system time to process permission grants
                 
                 Log.d("MainActivity", "Permissions verified, initializing map system")
+                mapViewModel.ensureLocationUpdates()
                 
                 // Initialize PoW preferences early in the initialization process
                 PoWPreferenceManager.init(this@MainActivity)

@@ -159,6 +159,14 @@ class MapViewModel(
 
     // --- Actions ---
 
+    fun ensureLocationUpdates() {
+        if (!locationChannelManager.isLocationServicesEnabled()) {
+            locationChannelManager.enableLocationServices()
+        }
+        locationChannelManager.enableLocationChannels()
+        locationChannelManager.beginLiveRefresh(1000)
+    }
+
     fun updateSettings(newNickname: String) {
         val normalizedNickname = newNickname.trim().ifBlank { resolveLocalDeviceName() }
         _myNickname.value = normalizedNickname

@@ -131,6 +131,15 @@ fun MapScreen(
         Configuration.getInstance().load(context, PreferenceManager.getDefaultSharedPreferences(context))
     }
 
+    LaunchedEffect(myLocation, mapController) {
+        val loc = myLocation
+        if (!hasCenteredOnce && loc != null && mapController != null) {
+            mapController?.setCenter(GeoPoint(loc.latitude, loc.longitude))
+            mapController?.setZoom(18.0)
+            hasCenteredOnce = true
+        }
+    }
+
     Scaffold(
         floatingActionButton = {
             Column(
